@@ -36,7 +36,7 @@ const PATTERNS: SecretPattern[] = [
     re: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/,
   },
   {
-    // API_KEY=some-real-looking-value (assignment with long opaque value)
+    // Credential-style assignment with a long opaque value
     kind: "Hardcoded credential",
     re: /\b(?:API_KEY|APIKEY|SECRET|SECRET_KEY|ACCESS_TOKEN|AUTH_TOKEN|PASSWORD)\s*[=:]\s*["']?[A-Za-z0-9+/_-]{16,}["']?/i,
   },

@@ -16,7 +16,7 @@ const BUILTIN_VARS = new Set([
     "SSR",
     "BASE_URL",
 ]);
-/** Extracts process.env.X / import.meta.env.X usages from source code. */
+/** Extracts `process.env` / `import.meta.env` variable usages from source code. */
 export function extractEnvUsages(content, file) {
     const usages = [];
     const lines = content.split("\n");

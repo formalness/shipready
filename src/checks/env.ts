@@ -20,7 +20,7 @@ const BUILTIN_VARS = new Set([
   "BASE_URL",
 ]);
 
-/** Extracts process.env.X / import.meta.env.X usages from source code. */
+/** Extracts `process.env` / `import.meta.env` variable usages from source code. */
 export function extractEnvUsages(
   content: string,
   file: string
