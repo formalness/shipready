@@ -45,6 +45,21 @@ async function applyFixes(root: string, force: boolean): Promise<FixResult[]> {
   ];
 }
 
+/** Reads the CLI's own version from its package.json (works from dist/ at runtime). */
+function ownVersion(): string {
+  try {
+    const pkgPath = path.resolve(
+      path.dirname(new URL(import.meta.url).pathname),
+      "..",
+      "package.json"
+    );
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8")) as { version?: string };
+    return pkg.version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
 /** Builds the commander program. Exported for testing. */
 export function buildProgram(): Command {
   const program = new Command();
@@ -52,7 +67,7 @@ export function buildProgram(): Command {
   program
     .name("shipready")
     .description("Pre-flight check for your repo before shipping.")
-    .version("1.0.0");
+    .version(ownVersion());
 
   program
     .command("check")
