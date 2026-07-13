@@ -1,7 +1,24 @@
 import type { CheckResult, Finding, ProjectInfo } from "../types.js";
+import { fileExists } from "../utils/files.js";
 import { isNodeEcosystem } from "../utils/framework.js";
 
 const IMPORTANT_SCRIPTS = ["dev", "build", "test", "lint"] as const;
+
+/** Linter configs that count as lint coverage even without a lint script. */
+const LINTER_CONFIGS = [
+  "biome.json",
+  "biome.jsonc",
+  "eslint.config.js",
+  "eslint.config.mjs",
+  "eslint.config.cjs",
+  "eslint.config.ts",
+  ".eslintrc",
+  ".eslintrc.js",
+  ".eslintrc.cjs",
+  ".eslintrc.json",
+  ".eslintrc.yml",
+  ".eslintrc.yaml",
+];
 
 /** Checks package.json existence and important scripts. */
 export function checkPackageJson(project: ProjectInfo): CheckResult {
@@ -32,7 +49,14 @@ export function checkPackageJson(project: ProjectInfo): CheckResult {
     message: "package.json found",
   });
 
-  const missing = IMPORTANT_SCRIPTS.filter((s) => !project.scripts[s]);
+  const hasLinterConfig = LINTER_CONFIGS.some((f) => fileExists(project.root, f));
+  const missing = IMPORTANT_SCRIPTS.filter((s) => {
+    if (project.scripts[s]) return false;
+    // A biome/eslint config means linting is set up; the script name is
+    // a convention, not a requirement (e.g. Biome repos run "biome check").
+    if (s === "lint" && hasLinterConfig) return false;
+    return true;
+  });
   if (missing.length > 0) {
     findings.push({
       severity: "warning",

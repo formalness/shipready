@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  checkEnv,
   extractEnvUsages,
   findRealLookingExampleValues,
   parseEnvKeys,
@@ -66,3 +67,45 @@ PORT=3000
     expect(findRealLookingExampleValues(content)).toEqual([]);
   });
 });
+
+describe("checkEnv monorepo awareness", () => {
+  it("accepts workspace-level .env.example files instead of a root one", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "shipready-ws-"));
+    try {
+      fs.mkdirSync(path.join(root, "apps", "web"), { recursive: true });
+      fs.writeFileSync(path.join(root, "apps", "web", ".env.example"), "API_KEY=your-key\n");
+      const result = checkEnv(
+        root,
+        [{ name: "API_KEY", file: "apps/web/index.ts", line: 1 }],
+        ["apps/web"]
+      );
+      const rules = result.findings.map((f) => f.rule);
+      expect(rules).toContain("env.example-found-workspaces");
+      expect(rules).not.toContain("env.example-missing");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("still errors when neither root nor workspaces have .env.example", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "shipready-ws-"));
+    try {
+      fs.mkdirSync(path.join(root, "apps", "web"), { recursive: true });
+      const result = checkEnv(
+        root,
+        [{ name: "API_KEY", file: "apps/web/index.ts", line: 1 }],
+        ["apps/web"]
+      );
+      expect(result.findings.map((f) => f.rule)).toContain("env.example-missing");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+

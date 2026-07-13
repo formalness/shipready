@@ -3,6 +3,16 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.6.0 - 2026-07-13
+
+### Added
+
+- Monorepo awareness: workspace packages are discovered via package.json `workspaces` and `pnpm-workspace.yaml`. The framework is detected from workspace apps (a Turborepo of Next.js apps now reads "Next.js", not "Node.js"), and per-workspace `.env.example` files satisfy the env-safety check instead of producing a false error at the root.
+- Ecosystem-aware `.gitignore` expectations: Go, Python, Rust, PHP, Ruby, Java, and Deno projects are no longer told to ignore `node_modules` or `.next`; each ecosystem gets only entries that apply to it. `shipready fix` follows the same rules.
+- A `biome.json(c)` or ESLint config now counts as lint coverage when there is no `lint` script - the script name is a convention, not a requirement.
+
+Found by testing against real repositories (gitleaks, next-forge, taxonomy).
+
 ## 1.5.3 - 2026-07-13
 
 ### Fixed

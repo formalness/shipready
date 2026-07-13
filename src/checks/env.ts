@@ -90,7 +90,8 @@ export function findRealLookingExampleValues(content: string): string[] {
 /** Checks .env / .env.example / gitignore safety around env vars. */
 export function checkEnv(
   root: string,
-  envUsages: EnvUsage[]
+  envUsages: EnvUsage[],
+  workspaceDirs: string[] = []
 ): CheckResult {
   const findings: Finding[] = [];
 
@@ -123,8 +124,20 @@ export function checkEnv(
     }
   }
 
+  // Monorepos keep .env.example per workspace package, not at the root.
+  const workspaceExamples = workspaceDirs.filter(
+    (d) =>
+      fileExists(root, `${d}/.env.example`) || fileExists(root, `${d}/.env.sample`)
+  );
+
   // .env.example presence
-  if (usedVars.length > 0 && !hasExample) {
+  if (usedVars.length > 0 && !hasExample && workspaceExamples.length > 0) {
+    findings.push({
+      severity: "success",
+      rule: "env.example-found-workspaces",
+      message: `.env.example found in ${workspaceExamples.length} workspace package${workspaceExamples.length > 1 ? "s" : ""}`,
+    });
+  } else if (usedVars.length > 0 && !hasExample) {
     findings.push({
       severity: "error",
       rule: "env.example-missing",
