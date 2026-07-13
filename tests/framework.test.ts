@@ -8,6 +8,7 @@ import {
   installCommand,
   isNodeEcosystem,
   runCommand,
+  findWorkspaceDirs,
 } from "../src/utils/framework.js";
 import { checkPackageJson } from "../src/checks/packageJson.js";
 import type { ProjectInfo } from "../src/types.js";
@@ -207,5 +208,49 @@ describe("isNodeEcosystem", () => {
   it("treats Static HTML and Python as non-Node", () => {
     expect(isNodeEcosystem("Static HTML")).toBe(false);
     expect(isNodeEcosystem("Python")).toBe(false);
+  });
+});
+
+describe("findWorkspaceDirs / monorepo framework detection", () => {
+  it("expands workspace globs and detects the framework from workspace packages", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "shipready-mono-"));
+    try {
+      fs.mkdirSync(path.join(root, "apps", "web"), { recursive: true });
+      fs.writeFileSync(
+        path.join(root, "apps", "web", "package.json"),
+        JSON.stringify({ name: "web", dependencies: { next: "16.0.0" } })
+      );
+      const rootPkg = { name: "mono", workspaces: ["apps/*"] };
+      fs.writeFileSync(path.join(root, "package.json"), JSON.stringify(rootPkg));
+
+      const dirs = findWorkspaceDirs(root, rootPkg);
+      expect(dirs).toEqual([path.join("apps", "web")]);
+      // Root has no framework deps, but the workspace app is Next.js.
+      expect(detectFramework(rootPkg, root, [], dirs)).toBe("Next.js");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reads packages from pnpm-workspace.yaml", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "shipready-pnpm-"));
+    try {
+      fs.mkdirSync(path.join(root, "packages", "ui"), { recursive: true });
+      fs.writeFileSync(path.join(root, "packages", "ui", "package.json"), "{}");
+      fs.writeFileSync(path.join(root, "pnpm-workspace.yaml"), "packages:\n  - \"packages/*\"\n");
+      expect(findWorkspaceDirs(root, null)).toEqual([path.join("packages", "ui")]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("returns no workspaces for a plain single-package repo", () => {
+    expect(findWorkspaceDirs("/nonexistent", { name: "x" })).toEqual([]);
   });
 });

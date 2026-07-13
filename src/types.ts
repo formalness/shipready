@@ -69,6 +69,8 @@ export interface ProjectInfo {
   scripts: Record<string, string>;
   /** Source files found during scan (relative paths). */
   sourceFiles: string[];
+  /** Workspace package dirs (relative) when the repo is a monorepo. */
+  workspaceDirs: string[];
 }
 
 export interface PackageJsonLike {

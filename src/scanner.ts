@@ -22,7 +22,7 @@ import {
   readJsonFile,
   readTextFile,
 } from "./utils/files.js";
-import { detectFramework, detectPackageManager } from "./utils/framework.js";
+import { detectFramework, detectPackageManager, findWorkspaceDirs } from "./utils/framework.js";
 import { isRuleDisabled, loadConfig, type ShipreadyConfig } from "./config.js";
 
 /** File extensions considered code for content scanning (not config/data). */
@@ -40,15 +40,17 @@ export async function detectProject(
 ): Promise<ProjectInfo> {
   const pkg = readJsonFile<PackageJsonLike>(root, "package.json");
   const sourceFiles = await findSourceFiles(root, config?.ignore ?? []);
+  const workspaceDirs = findWorkspaceDirs(root, pkg);
 
   return {
     root,
     hasPackageJson: fileExists(root, "package.json"),
     packageJson: pkg,
     packageManager: detectPackageManager(root),
-    framework: detectFramework(pkg, root, sourceFiles),
+    framework: detectFramework(pkg, root, sourceFiles, workspaceDirs),
     scripts: pkg?.scripts ?? {},
     sourceFiles,
+    workspaceDirs,
   };
 }
 
@@ -190,11 +192,11 @@ export async function runScan(root: string, options: ScanOptions = {}): Promise<
   const rawResults: CheckResult[] = [
     checkPackageJson(project),
     checkReadme(root),
-    checkEnv(root, envUsages),
+    checkEnv(root, envUsages, project.workspaceDirs),
     checkSecrets(secrets),
     ...(options.history ? [checkHistory(historySecrets, historyScanned)] : []),
     checkTodos(todos),
-    checkGitignore(root),
+    checkGitignore(root, project.framework),
   ];
 
   // Disabled rules are removed before scoring so they don't affect the score.

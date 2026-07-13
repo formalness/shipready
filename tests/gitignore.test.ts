@@ -46,3 +46,33 @@ build
     expect(missingIgnoreEntries(content)).toContain(".env");
   });
 });
+
+describe("importantIgnoresFor", () => {
+  it("suggests only ecosystem-relevant entries for Go projects", () => {
+    // Suggesting node_modules to a Go repo is noise that erodes trust.
+    const missing = missingIgnoreEntries("", "Go");
+    expect(missing).toEqual([".env"]);
+    expect(missing).not.toContain("node_modules");
+    expect(missing).not.toContain(".next");
+  });
+
+  it("suggests Python-specific entries for Python projects", () => {
+    const missing = missingIgnoreEntries("", "Python");
+    expect(missing).toEqual([".env", "__pycache__", ".venv"]);
+  });
+
+  it("suggests target for Rust projects", () => {
+    expect(missingIgnoreEntries("", "Rust")).toContain("target");
+  });
+
+  it("keeps the full Node list for Node-ecosystem frameworks", () => {
+    const missing = missingIgnoreEntries("", "Next.js");
+    expect(missing).toContain("node_modules");
+    expect(missing).toContain(".next");
+  });
+
+  it("defaults to the Node list when framework is not provided", () => {
+    expect(missingIgnoreEntries("")).toContain("node_modules");
+  });
+});
+

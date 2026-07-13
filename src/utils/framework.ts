@@ -1,5 +1,60 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { Framework, PackageJsonLike, PackageManager } from "../types.js";
 import { fileExists } from "./files.js";
+
+/**
+ * Finds workspace package directories for monorepos. Reads patterns from
+ * package.json "workspaces" and pnpm-workspace.yaml, expanding one level of
+ * trailing-star globs ("apps/*"). Only dirs that contain a package.json
+ * count - that's what makes them workspace packages.
+ */
+export function findWorkspaceDirs(root: string, pkg: PackageJsonLike | null): string[] {
+  const patterns: string[] = [];
+
+  const ws = pkg?.["workspaces"];
+  if (Array.isArray(ws)) patterns.push(...(ws as string[]));
+  else if (ws && typeof ws === "object" && Array.isArray((ws as { packages?: string[] }).packages)) {
+    patterns.push(...((ws as { packages: string[] }).packages));
+  }
+
+  const pnpmWs = path.join(root, "pnpm-workspace.yaml");
+  if (fs.existsSync(pnpmWs)) {
+    try {
+      // Minimal YAML: only the common "packages:" list form is supported.
+      const lines = fs.readFileSync(pnpmWs, "utf8").split("\n");
+      let inPackages = false;
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (line.startsWith("packages:")) { inPackages = true; continue; }
+        if (inPackages) {
+          if (line.startsWith("- ")) patterns.push(line.slice(2).trim().replace(/^["']|["']$/g, ""));
+          else if (line && !line.startsWith("#")) inPackages = false;
+        }
+      }
+    } catch { /* unreadable yaml: treat as no workspaces */ }
+  }
+
+  const dirs = new Set<string>();
+  for (const pattern of patterns) {
+    if (pattern.startsWith("!")) continue;
+    if (pattern.endsWith("/*")) {
+      const base = pattern.slice(0, -2);
+      const abs = path.join(root, base);
+      if (!fs.existsSync(abs)) continue;
+      try {
+        for (const entry of fs.readdirSync(abs, { withFileTypes: true })) {
+          if (entry.isDirectory() && fs.existsSync(path.join(abs, entry.name, "package.json"))) {
+            dirs.add(path.join(base, entry.name));
+          }
+        }
+      } catch { /* unreadable dir */ }
+    } else if (fs.existsSync(path.join(root, pattern, "package.json"))) {
+      dirs.add(pattern);
+    }
+  }
+  return [...dirs].sort();
+}
 
 /** Detects the package manager based on lockfiles and manifests. */
 export function detectPackageManager(root: string): PackageManager {
@@ -44,13 +99,28 @@ function countByExt(files: string[], exts: string[]): number {
 export function detectFramework(
   pkg: PackageJsonLike | null,
   root?: string,
-  sourceFiles: string[] = []
+  sourceFiles: string[] = [],
+  workspaceDirs: string[] = []
 ): Framework {
   if (pkg) {
     const deps: Record<string, string> = {
       ...pkg.dependencies,
       ...pkg.devDependencies,
     };
+    // Monorepo roots rarely depend on the framework directly - check the
+    // workspace packages so a Turborepo of Next.js apps reads "Next.js",
+    // not "Node.js".
+    if (root && workspaceDirs.length > 0 && !deps["next"] && !deps["react"] && !deps["vue"] && !deps["svelte"]) {
+      for (const dir of workspaceDirs) {
+        try {
+          const wsPkg = JSON.parse(
+            fs.readFileSync(path.join(root, dir, "package.json"), "utf8")
+          ) as PackageJsonLike;
+          const wsResult = detectFramework(wsPkg, undefined, []);
+          if (wsResult !== "Node.js") return wsResult;
+        } catch { /* skip unreadable workspace */ }
+      }
+    }
     // Order matters: meta-frameworks before their underlying libraries.
     if (deps["next"]) return "Next.js";
     if (deps["astro"]) return "Astro";
