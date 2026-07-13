@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.3] - 2026-07-13
+
+### Fixed
+
+- `--version` now works correctly on Windows: the package.json path was built with `url.pathname`, which produces broken paths like `/F:/...` on Windows; switched to `fileURLToPath`
+
 ## [1.0.2] - 2026-07-13
 
 ### Fixed

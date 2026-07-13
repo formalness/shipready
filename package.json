@@ -1,6 +1,6 @@
 {
   "name": "shipready",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Pre-flight check for your repo before shipping. Scans AI-coded projects for secrets, env issues, debug leftovers, and generates AI-agent instruction files.",
   "type": "module",
   "license": "MIT",

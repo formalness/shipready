@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import pc from "picocolors";
 import { detectProject, runScan, scanFiles } from "./scanner.js";
@@ -49,7 +50,7 @@ async function applyFixes(root: string, force: boolean): Promise<FixResult[]> {
 function ownVersion(): string {
   try {
     const pkgPath = path.resolve(
-      path.dirname(new URL(import.meta.url).pathname),
+      path.dirname(fileURLToPath(import.meta.url)),
       "..",
       "package.json"
     );
