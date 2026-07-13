@@ -58,7 +58,10 @@ async function applyFixes(root: string, force: boolean, dryRun = false): Promise
     ...[fixEnvExample(root, envUsages, force, dryRun)].filter(
       (r) => !(r.action === "skipped" && handled.has(r.file))
     ),
-    fixGitignore(root, dryRun),
+    fixGitignore(root, dryRun, project.framework, {
+      hasBuildScript: Boolean(project.scripts["build"]),
+      usesEnv: envUsages.length > 0 || secretFix.envAdditions.length > 0,
+    }),
     ...fixAgentFiles(root, project, force, dryRun),
   ];
 

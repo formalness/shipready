@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.8.1 - 2026-07-13
+
+### Fixed
+
+- `shipready fix` now applies the same framework/context awareness to `.gitignore` as `check` does: it no longer suggests `.next`, `node_modules`, or `.env` to non-Node repos (found by running the released 1.8.0 against gitleaks, a Go repo). The fixer already supported this - the CLI just never passed the project context through.
+
 ## 1.8.0 - 2026-07-13
 
 ### Added

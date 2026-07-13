@@ -1,17 +1,26 @@
-import { importantIgnoresFor, missingIgnoreEntries } from "../checks/gitignore.js";
+import {
+  type GitignoreContext,
+  importantIgnoresFor,
+  missingIgnoreEntries,
+} from "../checks/gitignore.js";
 import { readTextFile, writeTextFile } from "../utils/files.js";
 import type { Framework } from "../types.js";
 import type { FixResult } from "./envExample.js";
 
 /** Adds missing important entries to .gitignore (creates it if absent). */
-export function fixGitignore(root: string, dryRun = false, framework?: Framework): FixResult {
+export function fixGitignore(
+  root: string,
+  dryRun = false,
+  framework?: Framework,
+  ctx?: GitignoreContext
+): FixResult {
   const file = ".gitignore";
   const existing = readTextFile(root, file);
 
   if (existing === null) {
     const content = [
       "# Added by shipready",
-      ...importantIgnoresFor(framework),
+      ...importantIgnoresFor(framework, ctx),
       "",
     ].join("\n");
     if (!dryRun) {
@@ -20,7 +29,7 @@ export function fixGitignore(root: string, dryRun = false, framework?: Framework
     return { file, action: "created", dryRun, preview: content };
   }
 
-  const missing = missingIgnoreEntries(existing, framework);
+  const missing = missingIgnoreEntries(existing, framework, ctx);
   if (missing.length === 0) {
     return { file, action: "skipped", reason: "already complete" };
   }

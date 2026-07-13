@@ -77,3 +77,20 @@ describe("shipready-ignore for hygiene checks", () => {
     expect(scanContentForTodos(content, "src/app.ts")).toEqual([]);
   });
 });
+
+describe("framework-aware gitignore fixing", () => {
+  it("does not suggest Node entries for a Go repo", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "shipready-gofix-"));
+    try {
+      fs.writeFileSync(path.join(root, ".gitignore"), "bin/\n");
+      const result = fixGitignore(root, true, "Go", { usesEnv: false });
+      const preview = result.preview ?? "";
+      expect(preview).not.toContain(".next");
+      expect(preview).not.toContain("node_modules");
+      expect(preview).not.toContain(".env");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
