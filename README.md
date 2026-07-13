@@ -166,6 +166,16 @@ False-positive protection:
 - **Bundle guard**: single-line minified blobs are skipped entirely
 - Matched values are always masked — shipready never prints a full secret
 
+### Suppressing a single finding
+
+If shipready flags a line you know is safe (a demo value, an already-revoked key in docs), add the `shipready-ignore` marker to that line:
+
+```js
+const DEMO_TOKEN = "ghp_thisIsADocumentationExample000000"; // shipready-ignore
+```
+
+The scanner skips any line containing `shipready-ignore`. For project-wide exceptions, prefer `secretAllowlist` in the config (see below) so the suppression is reviewable in one place.
+
 ## Configuration
 
 Optional `shipready.config.json` in your project root:
