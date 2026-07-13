@@ -4,14 +4,34 @@ import fg from "fast-glob";
 
 /** Glob patterns that are always ignored when scanning. */
 export const IGNORE_PATTERNS = [
-  "node_modules/**",
-  ".git/**",
-  "dist/**",
-  "build/**",
-  ".next/**",
-  "out/**",
-  "coverage/**",
-  ".cache/**",
+  // Dependencies and VCS (at any depth)
+  "**/node_modules/**",
+  "**/.git/**",
+  // Build output (at any depth, e.g. mobile/build/)
+  "**/dist/**",
+  "**/build/**",
+  "**/.next/**",
+  "**/out/**",
+  "**/coverage/**",
+  "**/.cache/**",
+  "**/.turbo/**",
+  "**/.output/**",
+  // Minified/bundled vendor assets — not user code
+  "**/*.min.js",
+  "**/*.min.css",
+  "**/*.bundle.js",
+  "**/*.chunk.js",
+  "**/vendor/**",
+  "**/vendors/**",
+  // Python artifacts
+  "**/__pycache__/**",
+  "**/.venv/**",
+  "**/venv/**",
+  // Lockfiles and maps
+  "**/*.map",
+  "**/package-lock.json",
+  "**/pnpm-lock.yaml",
+  "**/yarn.lock",
 ];
 
 /** Extensions we treat as scannable text/code files. */
@@ -38,6 +58,9 @@ export const CODE_EXTENSIONS = [
   "toml",
   "env",
   "sh",
+  // Static sites: inline <script> blocks can leak keys just as easily
+  "html",
+  "htm",
 ];
 
 /** Returns true if the file exists (relative to root or absolute). */

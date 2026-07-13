@@ -3,6 +3,20 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.4.0] - 2026-07-13
+
+### Added
+
+- **Project detection beyond Node.js**: static HTML sites, Python, Go, Rust, PHP, Ruby, Java, and Deno projects are now identified by manifests (pyproject.toml, Cargo.toml, go.mod, composer.json, Gemfile, ...) and dominant source file types instead of showing "project unknown"
+- New framework detections from package.json: Astro, Remix, Angular, Gatsby
+- Package manager detection for pip, poetry, uv, cargo, go, composer, and bundler; a bare package.json without a lockfile now reports npm instead of unknown
+- **HTML files are now scanned**: secrets in inline `<script>` blocks of static sites are detected (previously .html files were skipped entirely), along with console.log/TODO hygiene checks
+
+### Fixed
+
+- Non-Node projects (Static HTML, Python, Go, ...) are no longer penalized -20 points for a missing package.json; the check reports "not applicable" instead
+- Report header shows a dash instead of "pm unknown" when no package manager applies
+
 ## [1.3.2] - 2026-07-13
 
 ### Fixed

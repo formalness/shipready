@@ -1,5 +1,16 @@
-import { describe, expect, it } from "vitest";
-import { detectFramework, installCommand, runCommand } from "../src/utils/framework.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  detectFramework,
+  detectPackageManager,
+  installCommand,
+  isNodeEcosystem,
+  runCommand,
+} from "../src/utils/framework.js";
+import { checkPackageJson } from "../src/checks/packageJson.js";
+import type { ProjectInfo } from "../src/types.js";
 
 describe("detectFramework", () => {
   it("detects Next.js", () => {
@@ -52,5 +63,149 @@ describe("commands", () => {
     expect(runCommand("pnpm", "dev")).toBe("pnpm dev");
     expect(runCommand("npm", "build")).toBe("npm run build");
     expect(runCommand("yarn", "test")).toBe("yarn test");
+  });
+});
+
+describe("detectFramework fallback (no package.json)", () => {
+  let tmp: string;
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sr-fw-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  const write = (rel: string, content = "") => {
+    const abs = path.join(tmp, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content);
+  };
+
+  it("detects a static HTML site", () => {
+    const files = ["index.html", "about.html", "js/main.js"];
+    expect(detectFramework(null, tmp, files)).toBe("Static HTML");
+  });
+
+  it("detects Python by pyproject.toml", () => {
+    write("pyproject.toml", "[project]\nname='x'");
+    expect(detectFramework(null, tmp, ["main.py"])).toBe("Python");
+  });
+
+  it("detects Python by dominant .py files without manifest", () => {
+    expect(detectFramework(null, tmp, ["app.py", "utils.py", "models.py"])).toBe("Python");
+  });
+
+  it("detects Rust by Cargo.toml", () => {
+    write("Cargo.toml", "[package]");
+    expect(detectFramework(null, tmp, ["src/main.rs"])).toBe("Rust");
+  });
+
+  it("detects Go by go.mod", () => {
+    write("go.mod", "module x");
+    expect(detectFramework(null, tmp, ["main.go"])).toBe("Go");
+  });
+
+  it("detects plain JS project as Node.js", () => {
+    expect(detectFramework(null, tmp, ["server.js", "lib/util.js"])).toBe("Node.js");
+  });
+
+  it("detects Astro from dependencies", () => {
+    expect(detectFramework({ dependencies: { astro: "^4.0.0" } })).toBe("Astro");
+  });
+
+  it("detects Remix from dependencies", () => {
+    expect(detectFramework({ dependencies: { "@remix-run/react": "^2.0.0" } })).toBe("Remix");
+  });
+
+  it("detects Angular from dependencies", () => {
+    expect(detectFramework({ dependencies: { "@angular/core": "^17.0.0" } })).toBe("Angular");
+  });
+});
+
+describe("detectPackageManager fallback", () => {
+  let tmp: string;
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sr-pm-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  const write = (rel: string, content = "") => {
+    fs.writeFileSync(path.join(tmp, rel), content);
+  };
+
+  it("returns npm for package.json without lockfile", () => {
+    write("package.json", "{}");
+    expect(detectPackageManager(tmp)).toBe("npm");
+  });
+
+  it("detects pip via requirements.txt", () => {
+    write("requirements.txt", "flask");
+    expect(detectPackageManager(tmp)).toBe("pip");
+  });
+
+  it("detects poetry via poetry.lock", () => {
+    write("poetry.lock", "");
+    expect(detectPackageManager(tmp)).toBe("poetry");
+  });
+
+  it("detects cargo via Cargo.toml", () => {
+    write("Cargo.toml", "[package]");
+    expect(detectPackageManager(tmp)).toBe("cargo");
+  });
+
+  it("detects go via go.mod", () => {
+    write("go.mod", "module x");
+    expect(detectPackageManager(tmp)).toBe("go");
+  });
+
+  it("returns none for a bare static site", () => {
+    write("index.html", "<html></html>");
+    expect(detectPackageManager(tmp)).toBe("none");
+  });
+});
+
+describe("package.json check for non-Node projects", () => {
+  const projectFor = (framework: ProjectInfo["framework"]): ProjectInfo => ({
+    root: "/tmp/x",
+    hasPackageJson: false,
+    packageJson: null,
+    packageManager: "none",
+    framework,
+    scripts: {},
+    sourceFiles: [],
+  });
+
+  it("does not penalize a static HTML site", () => {
+    const result = checkPackageJson(projectFor("Static HTML"));
+    expect(result.findings[0].rule).toBe("package-json.not-applicable");
+    expect(result.findings[0].severity).toBe("info");
+  });
+
+  it("does not penalize a Python project", () => {
+    const result = checkPackageJson(projectFor("Python"));
+    expect(result.findings[0].rule).toBe("package-json.not-applicable");
+  });
+
+  it("still flags a Node.js project without package.json", () => {
+    const result = checkPackageJson(projectFor("Node.js"));
+    expect(result.findings[0].rule).toBe("package-json.missing");
+    expect(result.findings[0].severity).toBe("error");
+  });
+});
+
+describe("isNodeEcosystem", () => {
+  it("treats Next.js as Node ecosystem", () => {
+    expect(isNodeEcosystem("Next.js")).toBe(true);
+  });
+
+  it("treats Static HTML and Python as non-Node", () => {
+    expect(isNodeEcosystem("Static HTML")).toBe(false);
+    expect(isNodeEcosystem("Python")).toBe(false);
   });
 });

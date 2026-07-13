@@ -122,12 +122,16 @@ export function renderReport(report: Report, verbose = false, version?: string):
   const { project } = report;
 
   const title = pc.bold(pc.magenta("shipready")) + (version ? pc.dim(` v${version}`) : "");
+  const pmLabel =
+    project.packageManager === "none" || project.packageManager === "unknown"
+      ? pc.dim("\u2014")
+      : project.packageManager;
   const meta =
     pc.dim("project ") +
     project.framework +
     pc.dim("  \u00b7  ") +
     pc.dim("pm ") +
-    project.packageManager;
+    pmLabel;
 
   lines.push("");
   lines.push(...box([title, meta]));

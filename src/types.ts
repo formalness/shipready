@@ -20,10 +20,28 @@ export interface CheckResult {
   findings: Finding[];
 }
 
-export type PackageManager = "npm" | "pnpm" | "yarn" | "bun" | "unknown";
+export type PackageManager =
+  | "npm"
+  | "pnpm"
+  | "yarn"
+  | "bun"
+  | "deno"
+  | "pip"
+  | "poetry"
+  | "uv"
+  | "cargo"
+  | "go"
+  | "composer"
+  | "bundler"
+  | "none"
+  | "unknown";
 
 export type Framework =
   | "Next.js"
+  | "Astro"
+  | "Remix"
+  | "Angular"
+  | "Gatsby"
   | "Vite"
   | "React"
   | "Vue"
@@ -31,6 +49,14 @@ export type Framework =
   | "Express"
   | "NestJS"
   | "Node.js"
+  | "Deno"
+  | "Static HTML"
+  | "Python"
+  | "Go"
+  | "Rust"
+  | "PHP"
+  | "Ruby"
+  | "Java"
   | "unknown";
 
 /** Info detected from the project. */

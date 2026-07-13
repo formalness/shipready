@@ -37,8 +37,8 @@ describe("detectPackageManager", () => {
     expect(detectPackageManager(tmp)).toBe("npm");
   });
 
-  it("returns unknown without lockfiles", () => {
-    expect(detectPackageManager(tmp)).toBe("unknown");
+  it("returns none for an empty directory", () => {
+    expect(detectPackageManager(tmp)).toBe("none");
   });
 });
 

@@ -29,6 +29,8 @@ import { isRuleDisabled, loadConfig, type ShipreadyConfig } from "./config.js";
 const CODE_ONLY = new Set([
   ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts",
   ".vue", ".svelte", ".py", ".rb", ".go", ".rs", ".java", ".php",
+  // Inline <script> in static sites carries console.log/TODO noise too
+  ".html", ".htm",
 ]);
 
 /** Gathers structured project info from the given root. */
@@ -44,7 +46,7 @@ export async function detectProject(
     hasPackageJson: fileExists(root, "package.json"),
     packageJson: pkg,
     packageManager: detectPackageManager(root),
-    framework: detectFramework(pkg),
+    framework: detectFramework(pkg, root, sourceFiles),
     scripts: pkg?.scripts ?? {},
     sourceFiles,
   };
