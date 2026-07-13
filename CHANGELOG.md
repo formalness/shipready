@@ -3,6 +3,20 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.0] - 2026-07-13
+
+### Added
+
+- **Entropy-based secret scanning**: generic credential assignments (`API_KEY=`, `PASSWORD=`, ...) are now only flagged when the value is statistically random (Shannon entropy gate), eliminating false positives on placeholders and weak examples
+- **Confidence levels**: every finding is high (error) or medium (warning); Stripe test keys, JWTs, and generic credentials report as warnings, and findings in test/fixture/mock files are automatically downgraded
+- 12 new provider patterns: GitLab, DigitalOcean, Hugging Face, Shopify, Mailchimp, Airtable, Fly.io, Cloudflare, Heroku, Discord bot tokens, Slack/Discord webhook URLs, Stripe webhook secrets, AWS secret access keys
+- False-positive protection: repeat/sequence filter (`aaaa...`, `1234...`), template detection (`${VAR}`, `process.env.X`), URL-credential placeholder detection, single-line bundle guard
+
+### Changed
+
+- Secret masking now masks only the secret value, not surrounding code
+- 111 tests (up from 76)
+
 ## [1.1.0] - 2026-07-13
 
 ### Added

@@ -74,4 +74,6 @@ export interface SecretFinding {
   file: string;
   line: number;
   masked: string;
+  /** high -> error, medium -> warning. Defaults to high when absent. */
+  confidence?: "high" | "medium";
 }

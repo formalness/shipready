@@ -152,4 +152,204 @@ describe("scanContentForSecrets", () => {
     );
     expect(found).toEqual([]);
   });
+
+  it("catches DB passwords even when the host mentions example.com", () => {
+    const found = scanContentForSecrets(
+      `const DB_URL = "postgres://admin:hunter2password@db.example.com:5432/prod";`,
+      "config.js"
+    );
+    expect(found[0].kind).toBe("Database URL with password");
+    expect(found[0].confidence).toBe("high");
+  });
+
+  it("skips DB URLs whose password itself is a placeholder", () => {
+    const found = scanContentForSecrets(
+      `const DB_URL = "postgres://user:example@db.host.com:5432/db";`,
+      "docs.md"
+    );
+    expect(found).toEqual([]);
+  });
+
+  it("catches real keys on lines that merely mention example.com", () => {
+    const found = scanContentForSecrets(
+      `fetch("https://api.example.com", { headers: { t: "ghp_Zq9rT3mN8vL2wX5cB7dF1gH4Zq9rT3mN" } })`,
+      "src/client.ts"
+    );
+    expect(found[0].kind).toBe("GitHub token");
+  });
+
+  it("honors shipready-ignore line marker", () => {
+    const found = scanContentForSecrets(
+      `const k = "ghp_Zq9rT3mN8vL2wX5cB7dF1gH4Zq9rT3mN"; // shipready-ignore`,
+      "src/client.ts"
+    );
+    expect(found).toEqual([]);
+  });
+
+  it("detects GitLab tokens", () => {
+    // Fixture is concatenated at runtime so GitHub push protection
+    // does not mistake it for a real credential in source.
+    const v = "glpat-" + "Zq9rT3mN8v" + "L2wX5cB7dF";
+    const found = scanContentForSecrets(`token = "${v}"`, "ci.ts");
+    expect(found[0].kind).toBe("GitLab token");
+    expect(found[0].confidence).toBe("high");
+  });
+
+  it("detects DigitalOcean tokens", () => {
+    const hex = "9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c" + "3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a";
+    const found = scanContentForSecrets(`t = "dop_v1_${hex}"`, "do.ts");
+    expect(found[0].kind).toBe("DigitalOcean token");
+  });
+
+  it("detects Hugging Face tokens", () => {
+    const found = scanContentForSecrets(
+      `hf = "hf_Zq9rT3mN8vL2wX5cB7dF1gH4Zq9rT3mN"`,
+      "ml.ts"
+    );
+    expect(found[0].kind).toBe("Hugging Face token");
+  });
+
+  it("detects Shopify tokens", () => {
+    const v = "shpat_" + "9f8a7b6c5d4e3f2a" + "1b0c9d8e7f6a5b4c";
+    const found = scanContentForSecrets(`s = "${v}"`, "shop.ts");
+    expect(found[0].kind).toBe("Shopify token");
+  });
+
+  it("detects Mailchimp keys", () => {
+    const v = "9f8a7b6c5d4e3f2a" + "1b0c9d8e7f6a5b4c" + "-us12";
+    const found = scanContentForSecrets(`mc = "${v}"`, "mail.ts");
+    expect(found[0].kind).toBe("Mailchimp key");
+  });
+
+  it("detects Slack webhook URLs", () => {
+    // Concatenated so GitHub push protection does not flag the fixture.
+    const u =
+      "https://hooks.slack.com" +
+      "/services/T0AB1CD2E" +
+      "/B9XY8ZW7V" +
+      "/Zq9rT3mN8vL2" +
+      "wX5cB7dF1gH4";
+    const found = scanContentForSecrets(`url = "${u}"`, "notify.ts");
+    expect(found[0].kind).toBe("Slack webhook URL");
+  });
+
+  it("detects Discord webhook URLs", () => {
+    const path = "Zq9rT3mN8vL2wX5cB7dF1gH4" + "Zq9rT3mN8vL2wX5cB7dF1gH4" + "Zq9rT3mN8vL2";
+    const found = scanContentForSecrets(
+      `hook = "https://discord.com/api/webhooks/993057288103746591/${path}"`,
+      "bot.ts"
+    );
+    expect(found[0].kind).toBe("Discord webhook URL");
+  });
+
+  it("detects Stripe webhook secrets", () => {
+    const found = scanContentForSecrets(
+      `whs = "whsec_Zq9rT3mN8vL2wX5cB7dF1gH4Zq"`,
+      "stripe.ts"
+    );
+    expect(found[0].kind).toBe("Stripe webhook secret");
+  });
+
+  it("flags Stripe test keys as medium confidence", () => {
+    const found = scanContentForSecrets(
+      `k = "sk_test_Zq9rT3mN8vL2wX5cB7dF"`,
+      "pay.ts"
+    );
+    expect(found[0].kind).toBe("Stripe test key");
+    expect(found[0].confidence).toBe("medium");
+  });
+
+  it("detects AWS access key IDs", () => {
+    const found = scanContentForSecrets(
+      `key = "AKIAZQ9RT3MN8VL2WX5C"`,
+      "aws.ts"
+    );
+    expect(found[0].kind).toBe("AWS access key ID");
+  });
+
+  it("detects AWS secret access keys by assignment", () => {
+    const v = "Zq9rT3mN8vL2wX5cB7dF" + "1gH4Jk6Pq2Rs8Tu0Vw3X";
+    const found = scanContentForSecrets(
+      `aws_secret_access_key = "${v}"`,
+      "aws.ts"
+    );
+    expect(found[0].kind).toBe("AWS secret access key");
+  });
+
+  it("skips values with long character repeats", () => {
+    const found = scanContentForSecrets(
+      `const k = "sk-proj-aaaaaaaaaaaaaaaaaaaaaa";`,
+      "src/ai.ts"
+    );
+    expect(found).toEqual([]);
+  });
+
+  it("skips templated values", () => {
+    const found = scanContentForSecrets(
+      "const h = `Authorization: Bearer ${process.env.TOKEN}`;",
+      "api.ts"
+    );
+    expect(found).toEqual([]);
+  });
+
+  it("skips low-entropy credential assignments", () => {
+    const found = scanContentForSecrets(
+      `const PASSWORD = "correcthorsebattery";`,
+      "auth.ts"
+    );
+    expect(found).toEqual([]);
+  });
+
+  it("flags high-entropy credential assignments as medium", () => {
+    const found = scanContentForSecrets(
+      `const API_KEY = "9fQ3kZ8vLmXcR2tB7dNpW4Ys6Ju1Hg5E";`,
+      "config.ts"
+    );
+    expect(found[0].kind).toBe("Hardcoded credential");
+    expect(found[0].confidence).toBe("medium");
+  });
+
+  it("downgrades findings in test files to medium confidence", () => {
+    const found = scanContentForSecrets(
+      `token: "ghp_Zq9rT3mN8vL2wX5cB7dF1gH4Zq9rT3mN9xW2"`,
+      "tests/fixtures.test.ts"
+    );
+    expect(found[0].confidence).toBe("medium");
+  });
+
+  it("keeps high confidence outside test paths", () => {
+    const found = scanContentForSecrets(
+      `token: "ghp_Zq9rT3mN8vL2wX5cB7dF1gH4Zq9rT3mN9xW2"`,
+      "src/deploy.ts"
+    );
+    expect(found[0].confidence).toBe("high");
+  });
+
+  it("skips bundled single-line blobs", () => {
+    const blob = `x = "ghp_Zq9rT3mN8vL2wX5cB7dF1gH4Zq9rT3mN9xW2";` + "y".repeat(10001);
+    const found = scanContentForSecrets(blob, "app.js");
+    expect(found).toEqual([]);
+  });
+});
+
+describe("checkSecrets severity mapping", () => {
+  it("maps high confidence to errors and medium to warnings", async () => {
+    const { checkSecrets } = await import("../src/checks/secrets.js");
+    const result = checkSecrets([
+      { kind: "GitHub token", file: "a.ts", line: 1, masked: "ghp_...111", confidence: "high" },
+      { kind: "JWT", file: "b.ts", line: 2, masked: "eyJ...222", confidence: "medium" },
+    ]);
+    const errors = result.findings.filter((f) => f.severity === "error");
+    const warnings = result.findings.filter((f) => f.severity === "warning");
+    expect(errors.some((f) => f.rule === "secrets.detected-item")).toBe(true);
+    expect(warnings.some((f) => f.rule === "secrets.possible-item")).toBe(true);
+  });
+
+  it("treats missing confidence as high", async () => {
+    const { checkSecrets } = await import("../src/checks/secrets.js");
+    const result = checkSecrets([
+      { kind: "OpenAI key", file: "a.ts", line: 1, masked: "sk-...111" },
+    ]);
+    expect(result.findings[0].severity).toBe("error");
+  });
 });
