@@ -11,6 +11,8 @@ shipready is a CLI for developers who build with AI and vibe-coding tools. It sc
 
 **No API key required. Works fully offline. No telemetry.**
 
+![shipready finds a hardcoded API key, moves it to .env automatically, and the score goes from 55 to 80](.github/assets/demo.gif)
+
 ## Why shipready exists
 
 AI coding tools are great at producing working code fast, but they routinely:
@@ -136,28 +138,36 @@ shipready fix --dry-run
 
 ```txt
 ╭──────────────────────────────────────────────────────────╮
-│ shipready v1.3.0                                         │
-│ project Next.js  ·  pm pnpm                              │
+│ shipready v1.8.0                                         │
+│ project Next.js  ·  pm npm                               │
 ╰──────────────────────────────────────────────────────────╯
 
-  Score  ████████████████████░░░░░░░░  72/100  almost there
+  Score  ███████████████░░░░░░░░░░░░░  55/100  not ready to ship
+  -8 weak README  ·  -6 no test script  ·  -25 hardcoded secret  ·  -6 TODO comments (3)
 
-  ✓ package.json  ok
-  ✓ README        ok
-  ✗ Env safety    .env.example missing (3 env vars used in code)
-  ✗                .env is not ignored by git
-  ✓ Secrets       No obvious secrets found
-  ✗ Git history   1 secret buried in git history (removed from code but still exposed)
-  ⚠ Code hygiene  4 TODO/FIXME comments found
-  ⚠                2 console.log calls found
-  ✓ .gitignore    ok
+  ✓ package.json  package.json found
+  ⚠               Missing scripts: test, lint
+  ✓ README        README.md found
+  ⚠               README looks thin - add installation and usage instructions
+  ℹ Env safety    No environment variables detected in code
+  ✗ Secrets       1 potential secret detected
+  ⚠               1 possible secret detected (lower confidence)
+  ⚠ Code hygiene  2 TODO/FIXME comments found
+  ⚠               1 console.log call found
+  ⚠ .gitignore    .gitignore missing entries: .env, .env.local, .next
 
   Next steps
-    1. Purge leaked secrets from git history (BFG or git filter-repo) and rotate them
-    2. Add .env to .gitignore
-    3. Create .env.example (run: shipready fix)
-    4. Remove debug logs and debugger statements before shipping
+    1. Rotate and remove hardcoded secrets immediately
+    2. Expand README with installation and usage sections
+    3. Add missing entries to .gitignore (run: shipready fix)
+    4. Add missing package.json scripts (build/test/lint)
+    5. Remove debug logs and debugger statements before shipping
+    6. Resolve TODO/FIXME comments or track them as issues
+
+  Run with --verbose to see file locations.
 ```
+
+Run `shipready fix` and the hardcoded key moves to `.env`, `.gitignore` gets patched, and the score jumps to 80 - see the [secret autofix](#secret-autofix) section.
 
 ## What it checks
 
@@ -380,24 +390,6 @@ Catch secrets **before** they enter history at all — see [`shipready staged`](
 ```
 
 Use `--json` to feed the report into other tooling, or `--sarif` for anything that speaks SARIF.
-
-## Scoring
-
-Every project starts at 100 and loses points for issues:
-
-| Issue | Deduction |
-| --- | --- |
-| Missing package.json | -20 |
-| Missing README | -15 |
-| Weak README | -8 |
-| Missing build script | -8 |
-| Missing test script | -6 |
-| Missing .env.example (when env vars exist) | -10 |
-| .env not gitignored | -15 |
-| Possible secret | -25 each (max -50) |
-| TODO/debug leftovers | -2 each (max -15) |
-
-The score never goes below 0.
 
 ## Development
 
