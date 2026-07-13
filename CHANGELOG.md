@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.5.3 - 2026-07-13
+
+### Fixed
+
+- `npm run lint` failed with `eslint: command not found` - eslint was referenced by the script but never installed. Added eslint + typescript-eslint with a flat config, fixed the one real finding (`prefer-const` in `src/checks/env.ts`), and wired a Lint step into CI.
+
 ## 1.5.2 - 2026-07-13
 
 ### Fixed
