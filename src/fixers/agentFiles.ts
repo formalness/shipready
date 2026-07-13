@@ -18,7 +18,8 @@ const TARGETS: Array<{
 export function fixAgentFiles(
   root: string,
   project: ProjectInfo,
-  force: boolean
+  force: boolean,
+  dryRun = false
 ): FixResult[] {
   const results: FixResult[] = [];
   for (const { file, generate } of TARGETS) {
@@ -27,8 +28,11 @@ export function fixAgentFiles(
       continue;
     }
     const existed = fileExists(root, file);
-    writeTextFile(root, file, generate(project));
-    results.push({ file, action: existed ? "updated" : "created" });
+    if (!dryRun) {
+      writeTextFile(root, file, generate(project));
+    }
+    // Agent files are long; the dry-run preview stays terse on purpose.
+    results.push({ file, action: existed ? "updated" : "created", dryRun });
   }
   return results;
 }

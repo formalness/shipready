@@ -4,6 +4,7 @@
 
 [![CI](https://github.com/formalness/shipready/actions/workflows/ci.yml/badge.svg)](https://github.com/formalness/shipready/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/shipready.svg)](https://www.npmjs.com/package/shipready)
+[![tests](https://img.shields.io/badge/tests-179%20passing-brightgreen.svg)](https://github.com/formalness/shipready/tree/main/tests)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![node >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
 
@@ -37,9 +38,10 @@ shipready check
 ## Usage
 
 ```bash
-shipready check [path]   # scan a project (current dir by default)
-shipready init  [path]   # generate AI-agent instruction files
-shipready fix   [path]   # apply safe automatic fixes
+shipready check  [path]   # scan a project (current dir by default)
+shipready staged [path]   # fast secrets-only scan of staged files (pre-commit)
+shipready init   [path]   # generate AI-agent instruction files
+shipready fix    [path]   # apply safe automatic fixes (--dry-run to preview)
 ```
 
 ## Commands
@@ -52,6 +54,7 @@ Scans the project and prints a report with a 0-100 score.
 | --- | --- |
 | `-v, --verbose` | show file and line locations for every finding |
 | `--json` | output the raw structured report as JSON (great for CI) |
+| `--sarif` | output SARIF 2.1.0 for **GitHub code scanning** — findings become native PR alerts |
 | `--fix` | apply safe fixes, re-scan, and show the score before/after |
 | `--history` | also scan the **full git history** (all branches) for secrets that were committed and later removed |
 | `--verify` | check detected keys against provider APIs to see if they are **live right now** |
@@ -74,6 +77,27 @@ For 12+ providers (OpenAI, Anthropic, GitHub, GitLab, Stripe, SendGrid, Google, 
 
 Verification requests contain only the key itself, go directly to the provider's official API host, and never mutate remote state. Nothing is ever sent to any third party.
 
+### `shipready staged [path]`
+
+Fast, secrets-only scan of the files **staged for commit** — built for pre-commit hooks. It reads content from the git index (`git show :file`), so partially staged files are checked exactly as they would be committed, not as they sit on disk.
+
+- High-confidence secrets **block the commit** (exit code 1)
+- Medium-confidence findings warn but do not block
+- TODO/console.log are deliberately not checked — hooks must be fast and only stop real dangers
+
+Hook setup with [husky](https://typicode.github.io/husky/):
+
+```bash
+npx husky init
+echo "npx shipready staged" > .husky/pre-commit
+```
+
+Or plain git:
+
+```bash
+echo 'npx shipready staged' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+```
+
 ### `shipready init [path]`
 
 Generates AI-agent instruction files based on your detected framework, package manager, and scripts:
@@ -93,6 +117,21 @@ Applies safe automatic fixes:
 - generates the AI-agent files above if missing
 
 It never deletes user code and never overwrites files without `--force`. A summary of changed files is printed at the end.
+
+Pass `--dry-run` to preview exactly what would change — nothing is written to disk:
+
+```txt
+shipready fix --dry-run
+
++ would create .env.example
+    | # Environment variables used by this project.
+    | API_URL=
++ would create .gitignore
+    | .env
+    | node_modules
+
+2 files would change. Run without --dry-run to apply.
+```
 
 ## Example output
 
@@ -194,7 +233,14 @@ If shipready flags a line you know is safe (a demo value, an already-revoked key
 const DEMO_TOKEN = "ghp_thisIsADocumentationExample000000"; // shipready-ignore
 ```
 
-The scanner skips any line containing `shipready-ignore`. For project-wide exceptions, prefer `secretAllowlist` in the config (see below) so the suppression is reviewable in one place.
+The marker works for **all checks** — secrets, `console.log`, `TODO`/`FIXME`, and `debugger` alike:
+
+```js
+console.log("startup banner"); // shipready-ignore
+// TODO: legacy, tracked in JIRA-123 - shipready-ignore
+```
+
+For project-wide exceptions, prefer `secretAllowlist` in the config (see below) so the suppression is reviewable in one place.
 
 ## Configuration
 
@@ -251,6 +297,33 @@ Example with options:
           version: "1.0.3"
 ```
 
+### GitHub code scanning (SARIF)
+
+Turn shipready findings into **native code scanning alerts** on pull requests:
+
+```yaml
+# .github/workflows/shipready-sarif.yml
+name: shipready code scanning
+on: [push, pull_request]
+permissions:
+  security-events: write
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx shipready check --sarif > shipready.sarif || true
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: shipready.sarif
+```
+
+Findings appear in the repository's **Security → Code scanning** tab and as inline PR annotations, with stable fingerprints so alerts track across pushes.
+
+### Pre-commit hook
+
+Catch secrets **before** they enter history at all — see [`shipready staged`](#shipready-staged-path) above.
+
 ### Manual setup
 
 `shipready check` exits with code `1` when errors are found, so it works in any CI:
@@ -259,7 +332,7 @@ Example with options:
       - run: npx shipready check --verbose
 ```
 
-Use `--json` to feed the report into other tooling.
+Use `--json` to feed the report into other tooling, or `--sarif` for anything that speaks SARIF.
 
 ## Scoring
 
@@ -292,10 +365,13 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for project structure and how to add ne
 
 ## Roadmap
 
+- [x] `shipready staged` for pre-commit hooks
+- [x] SARIF report output for GitHub code scanning
+- [x] Git history scanning (`--history`)
+- [x] Live key verification (`--verify`)
+- [ ] Benchmark against gitleaks/trufflehog with published numbers
+- [ ] Framework-aware scoring (Next.js vs Vite vs Python have different needs)
 - [ ] Optional AI-powered fix suggestions (bring your own key)
-- [ ] `shipready check --staged` for pre-commit hooks
-- [ ] Markdown/SARIF report output for GitHub code scanning
-- [ ] More frameworks and secret providers
 
 ## License
 

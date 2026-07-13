@@ -18,13 +18,18 @@ export interface FixResult {
   file: string;
   action: "created" | "updated" | "skipped";
   reason?: string;
+  /** True when produced by --dry-run: nothing was written to disk. */
+  dryRun?: boolean;
+  /** Content (or content diff) that was/would be written, for preview. */
+  preview?: string;
 }
 
 /** Creates .env.example if missing (or with force). */
 export function fixEnvExample(
   root: string,
   usages: EnvUsage[],
-  force: boolean
+  force: boolean,
+  dryRun = false
 ): FixResult {
   const file = ".env.example";
   const names = [...new Set(usages.map((u) => u.name))];
@@ -37,6 +42,14 @@ export function fixEnvExample(
   }
 
   const existed = fileExists(root, file);
-  writeTextFile(root, file, buildEnvExample(usages));
-  return { file, action: existed ? "updated" : "created" };
+  const content = buildEnvExample(usages);
+  if (!dryRun) {
+    writeTextFile(root, file, content);
+  }
+  return {
+    file,
+    action: existed ? "updated" : "created",
+    dryRun,
+    preview: content,
+  };
 }

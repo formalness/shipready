@@ -9,15 +9,25 @@ import { fixAgentFiles } from "./fixers/agentFiles.js";
 import { fixEnvExample, type FixResult } from "./fixers/envExample.js";
 import { fixGitignore } from "./fixers/gitignore.js";
 import { renderReport } from "./utils/report.js";
+import { toSarif } from "./utils/sarif.js";
+import { scanStaged } from "./checks/staged.js";
+import { isGitRepo } from "./checks/history.js";
 
-function printFixResults(results: FixResult[]): void {
+function printFixResults(results: FixResult[], showPreview = false): void {
   for (const r of results) {
+    const verb = (v: string) => (r.dryRun ? `would ${v.replace(/ed$/, "e")}` : v);
     if (r.action === "created") {
-      console.log(`${pc.green("+")} created ${pc.bold(r.file)}`);
+      console.log(`${pc.green("+")} ${verb("created")} ${pc.bold(r.file)}`);
     } else if (r.action === "updated") {
-      console.log(`${pc.yellow("~")} updated ${pc.bold(r.file)}`);
+      console.log(`${pc.yellow("~")} ${verb("updated")} ${pc.bold(r.file)}`);
     } else {
       console.log(`${pc.dim("-")} skipped ${r.file}${r.reason ? pc.dim(` (${r.reason})`) : ""}`);
+    }
+    if (showPreview && r.preview && r.action !== "skipped") {
+      const lines = r.preview.trimEnd().split("\n");
+      for (const l of lines) {
+        console.log(pc.dim("    | ") + pc.green(l));
+      }
     }
   }
 }
@@ -35,14 +45,14 @@ function resolveRoot(dir: string | undefined): string {
 }
 
 /** Applies all safe fixes for the given root; returns the results. */
-async function applyFixes(root: string, force: boolean): Promise<FixResult[]> {
+async function applyFixes(root: string, force: boolean, dryRun = false): Promise<FixResult[]> {
   const config = loadConfig(root);
   const project = await detectProject(root, config);
   const { envUsages } = scanFiles(root, project.sourceFiles, config.secretAllowlist);
   return [
-    fixEnvExample(root, envUsages, force),
-    fixGitignore(root),
-    ...fixAgentFiles(root, project, force),
+    fixEnvExample(root, envUsages, force, dryRun),
+    fixGitignore(root, dryRun),
+    ...fixAgentFiles(root, project, force, dryRun),
   ];
 }
 
@@ -76,14 +86,16 @@ export function buildProgram(): Command {
     .argument("[path]", "project directory to scan (defaults to current directory)")
     .option("-v, --verbose", "show file locations for every finding")
     .option("--json", "output the raw report as JSON")
+    .option("--sarif", "output the report as SARIF 2.1.0 for GitHub code scanning")
     .option("--fix", "apply safe fixes, then re-scan and show the improved report")
     .option("--history", "also scan the full git history for leaked secrets")
     .option("--verify", "check detected keys against provider APIs to see if they are live")
-    .action(async (dir: string | undefined, opts: { verbose?: boolean; json?: boolean; fix?: boolean; history?: boolean; verify?: boolean }) => {
+    .action(async (dir: string | undefined, opts: { verbose?: boolean; json?: boolean; sarif?: boolean; fix?: boolean; history?: boolean; verify?: boolean }) => {
       try {
         const root = resolveRoot(dir);
+        const machineOutput = Boolean(opts.json || opts.sarif);
         const scanOpts = { history: opts.history, verify: opts.verify };
-        if (opts.verify && !opts.json) {
+        if (opts.verify && !machineOutput) {
           console.log(pc.dim("\n  Verifying detected keys against provider APIs..."));
         }
         let report = await runScan(root, scanOpts);
@@ -93,7 +105,7 @@ export function buildProgram(): Command {
           const results = await applyFixes(root, false);
           report = await runScan(root, scanOpts);
 
-          if (!opts.json) {
+          if (!machineOutput) {
             console.log("");
             console.log(pc.bold(pc.magenta("shipready check --fix")));
             console.log("");
@@ -107,7 +119,9 @@ export function buildProgram(): Command {
           }
         }
 
-        if (opts.json) {
+        if (opts.sarif) {
+          console.log(toSarif(report, ownVersion()));
+        } else if (opts.json) {
           console.log(JSON.stringify(report, null, 2));
         } else {
           console.log(renderReport(report, opts.verbose ?? false, ownVersion()));
@@ -154,27 +168,100 @@ export function buildProgram(): Command {
     .description("Apply safe automatic fixes (.env.example, .gitignore, agent files)")
     .argument("[path]", "project directory (defaults to current directory)")
     .option("-f, --force", "overwrite existing files")
-    .action(async (dir: string | undefined, opts: { force?: boolean }) => {
+    .option("--dry-run", "show what would change without writing anything")
+    .action(async (dir: string | undefined, opts: { force?: boolean; dryRun?: boolean }) => {
       try {
         const root = resolveRoot(dir);
+        const dryRun = opts.dryRun ?? false;
 
         console.log("");
-        console.log(pc.bold(pc.magenta("shipready fix")));
+        console.log(pc.bold(pc.magenta(`shipready fix${dryRun ? " --dry-run" : ""}`)));
         console.log("");
 
-        const results = await applyFixes(root, opts.force ?? false);
-        printFixResults(results);
+        const results = await applyFixes(root, opts.force ?? false, dryRun);
+        printFixResults(results, dryRun);
 
         const changed = results.filter((r) => r.action !== "skipped").length;
         console.log("");
-        console.log(
-          changed > 0
-            ? pc.green(`${changed} file${changed > 1 ? "s" : ""} changed.`)
-            : pc.dim("Nothing to fix - everything already in place.")
-        );
+        if (dryRun) {
+          console.log(
+            changed > 0
+              ? pc.yellow(`${changed} file${changed > 1 ? "s" : ""} would change. Run without --dry-run to apply.`)
+              : pc.dim("Nothing to fix - everything already in place.")
+          );
+        } else {
+          console.log(
+            changed > 0
+              ? pc.green(`${changed} file${changed > 1 ? "s" : ""} changed.`)
+              : pc.dim("Nothing to fix - everything already in place.")
+          );
+        }
         console.log("");
       } catch (err) {
         console.error(pc.red(`shipready fix failed: ${(err as Error).message}`));
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("staged")
+    .description("Fast secrets-only scan of files staged for commit (pre-commit hook)")
+    .argument("[path]", "project directory (defaults to current directory)")
+    .action(async (dir: string | undefined) => {
+      try {
+        const root = resolveRoot(dir);
+        if (!isGitRepo(root)) {
+          console.error(pc.red("shipready staged: not a git repository"));
+          process.exitCode = 1;
+          return;
+        }
+
+        const config = loadConfig(root);
+        const { files, secrets } = scanStaged(root, config.secretAllowlist);
+
+        if (files.length === 0) {
+          console.log(pc.dim("shipready staged: no staged files to scan."));
+          return;
+        }
+
+        const high = secrets.filter((s) => s.confidence !== "medium");
+        const medium = secrets.filter((s) => s.confidence === "medium");
+
+        if (secrets.length === 0) {
+          console.log(
+            pc.green("✓") +
+              ` shipready staged: ${files.length} file${files.length > 1 ? "s" : ""} clean.`
+          );
+          return;
+        }
+
+        console.log("");
+        for (const s of high) {
+          console.log(
+            `${pc.red("✗")} ${s.kind}: ${s.masked} ${pc.dim(`${s.file}:${s.line}`)}`
+          );
+        }
+        for (const s of medium) {
+          console.log(
+            `${pc.yellow("⚠")} ${s.kind}: ${s.masked} ${pc.dim(`${s.file}:${s.line}`)} ${pc.dim("(low confidence)")}`
+          );
+        }
+        console.log("");
+
+        if (high.length > 0) {
+          console.log(
+            pc.red(
+              `Blocked: ${high.length} secret${high.length > 1 ? "s" : ""} in staged files. ` +
+                `Remove them (or add // shipready-ignore for intentional values) and retry.`
+            )
+          );
+          // Only high-confidence findings block the commit; medium is a warning.
+          process.exitCode = 1;
+        } else {
+          console.log(pc.yellow("Warning only - commit not blocked."));
+        }
+      } catch (err) {
+        console.error(pc.red(`shipready staged failed: ${(err as Error).message}`));
         process.exitCode = 1;
       }
     });

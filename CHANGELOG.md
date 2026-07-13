@@ -3,6 +3,16 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.5.0] - 2026-07-13
+
+### Added
+
+- **`--sarif`**: SARIF 2.1.0 output for GitHub code scanning - findings become native PR alerts with stable fingerprints for tracking across pushes; documented workflow with codeql-action/upload-sarif
+- **`shipready staged`**: fast secrets-only scan of files staged for commit, built for pre-commit hooks. Reads content from the git index so partially staged files are checked as they would be committed. High-confidence secrets block the commit (exit 1); medium-confidence findings warn only. Husky and plain-git setup documented
+- **`fix --dry-run`**: preview exactly what `shipready fix` would create or change (with content preview) without writing anything to disk
+- `shipready-ignore` marker now works for all checks: console.log, TODO/FIXME, and debugger lines can be suppressed the same way as secrets
+- Tests badge in README; roadmap updated to reflect shipped features
+
 ## [1.4.0] - 2026-07-13
 
 ### Added

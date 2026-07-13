@@ -27,6 +27,9 @@ export function scanContentForTodos(
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    // Same suppression marker the secret scanner honors - one convention
+    // for all checks, so intentional console.log/TODO lines stay quiet.
+    if (line.includes("shipready-ignore")) continue;
     const marker = line.match(MARKER_RE);
     if (marker) {
       found.push({ kind: "marker", label: marker[1], file, line: i + 1 });
