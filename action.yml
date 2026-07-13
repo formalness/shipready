@@ -1,4 +1,4 @@
-name: "shipready"
+name: "shipready Quality Gate"
 description: "Pre-flight check for your repo before shipping: secrets, env safety, README, debug leftovers, and repo hygiene."
 author: "formalness"
 
