@@ -77,3 +77,52 @@ describe("checkPackageJson", () => {
     expect(result.findings.some((f) => f.rule === "scripts.found")).toBe(true);
   });
 });
+
+describe("library and monorepo script awareness", () => {
+  it("does not require dev/build scripts for published libraries", () => {
+    // express has a "files" allowlist and only test/lint scripts.
+    const result = checkPackageJson({
+      root: "/nonexistent",
+      hasPackageJson: true,
+      packageJson: { name: "somelib", files: ["lib/"], scripts: { test: "mocha", lint: "eslint ." } },
+      scripts: { test: "mocha", lint: "eslint ." },
+      framework: "Node.js",
+      packageManager: "npm",
+      sourceFiles: [],
+      workspaceDirs: [],
+      extraLanguages: [],
+    } as never);
+    const missing = result.findings.find((f) => f.rule === "scripts.missing");
+    expect(missing?.message ?? "").not.toContain("dev");
+    expect(missing?.message ?? "").not.toContain("build");
+  });
+
+  it("accepts scripts living in workspace packages", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "shipready-wsscripts-"));
+    try {
+      fs.mkdirSync(path.join(root, "apps", "web"), { recursive: true });
+      fs.writeFileSync(
+        path.join(root, "apps", "web", "package.json"),
+        JSON.stringify({ name: "web", scripts: { dev: "next dev", build: "next build", test: "vitest", lint: "eslint ." } })
+      );
+      const result = checkPackageJson({
+        root,
+        hasPackageJson: true,
+        packageJson: { name: "mono", private: true },
+        scripts: {},
+        framework: "Next.js",
+        packageManager: "pnpm",
+        sourceFiles: [],
+        workspaceDirs: [path.join("apps", "web")],
+        extraLanguages: [],
+      } as never);
+      expect(result.findings.some((f) => f.rule === "scripts.missing")).toBe(false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+

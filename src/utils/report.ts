@@ -129,6 +129,7 @@ export function renderReport(report: Report, verbose = false, version?: string):
   const meta =
     pc.dim("project ") +
     project.framework +
+    (project.extraLanguages.length > 0 ? " + " + project.extraLanguages.join(" + ") : "") +
     pc.dim("  \u00b7  ") +
     pc.dim("pm ") +
     pmLabel;
@@ -139,6 +140,16 @@ export function renderReport(report: Report, verbose = false, version?: string):
   lines.push(
     `  ${pc.bold("Score")}  ${scoreBar(report.score)}  ${scoreLabel(report.score)}  ${verdict(report.score)}`
   );
+  if (report.deductions.length > 0) {
+    lines.push(
+      "  " +
+        pc.dim(
+          report.deductions
+            .map((d) => `-${d.points} ${d.reason}`)
+            .join("  \u00b7  ")
+        )
+    );
+  }
   lines.push("");
 
   // Aligned checks table: one row per check, then its top-level findings.

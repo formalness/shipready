@@ -76,3 +76,26 @@ describe("importantIgnoresFor", () => {
   });
 });
 
+describe("importantIgnoresFor with context", () => {
+  it("suggests .next only for Next.js, dist for other Node frameworks", () => {
+    expect(missingIgnoreEntries("", "Next.js", { hasBuildScript: true })).toContain(".next");
+    const vite = missingIgnoreEntries("", "Vite", { hasBuildScript: true });
+    expect(vite).toContain("dist");
+    expect(vite).not.toContain(".next");
+  });
+
+  it("skips build output dirs when there is no build script", () => {
+    const entries = missingIgnoreEntries("", "Node.js", { hasBuildScript: false });
+    expect(entries).not.toContain("dist");
+    expect(entries).not.toContain("build");
+    expect(entries).not.toContain(".next");
+    expect(entries).toContain(".env");
+  });
+
+  it("skips .env for non-Node projects that use no env vars", () => {
+    // Suggesting .env to ripgrep (zero env usage) is pure noise.
+    expect(missingIgnoreEntries("", "Rust", { usesEnv: false })).not.toContain(".env");
+    expect(missingIgnoreEntries("", "Rust", { usesEnv: true })).toContain(".env");
+  });
+});
+

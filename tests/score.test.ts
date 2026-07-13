@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateScore } from "../src/scanner.js";
+import { calculateScore, calculateScoreBreakdown } from "../src/scanner.js";
 import type { CheckResult } from "../src/types.js";
 
 function result(name: string, rules: Array<{ rule: string; message?: string }>): CheckResult {
@@ -83,3 +83,44 @@ describe("calculateScore", () => {
     expect(calculateScore(results)).toBe(0);
   });
 });
+
+describe("calculateScoreBreakdown", () => {
+  it("itemizes every deduction and sums to the score", () => {
+    const results = [
+      {
+        name: "Env safety",
+        findings: [
+          { severity: "error" as const, rule: "env.example-missing", message: "" },
+          { severity: "error" as const, rule: "env.not-ignored", message: "" },
+        ],
+      },
+    ];
+    const { score, deductions } = calculateScoreBreakdown(results as never);
+    expect(deductions).toEqual([
+      { reason: ".env.example missing", points: 10 },
+      { reason: ".env not ignored", points: 15 },
+    ]);
+    expect(score).toBe(75);
+  });
+
+  it("returns no deductions for a clean report", () => {
+    const { score, deductions } = calculateScoreBreakdown([]);
+    expect(score).toBe(100);
+    expect(deductions).toEqual([]);
+  });
+
+  it("keeps calculateScore consistent with the breakdown", () => {
+    const results = [
+      {
+        name: "Secrets",
+        findings: [
+          { severity: "error" as const, rule: "secrets.detected-item", message: "" },
+        ],
+      },
+    ];
+    expect(calculateScore(results as never)).toBe(
+      calculateScoreBreakdown(results as never).score
+    );
+  });
+});
+
