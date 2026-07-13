@@ -3,6 +3,18 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.5.1] - 2026-07-13
+
+### Added
+
+- **BENCHMARK.md**: published head-to-head benchmark against gitleaks v8.24.3 with full methodology, fairness notes, and reproduction steps. Result on a 7-leak/10-bait corpus: shipready 7/7 caught with 0 error-level false positives, gitleaks 4/7 with 1 false positive
+- README comparison section summarizing the benchmark
+
+### Fixed (gaps found by the benchmark itself)
+
+- Committed `.env.backup`/`.env.old`-style files are now scanned for secrets - the `.env*` skip rule was too broad and silently exempted env backups (gitleaks caught these, we didn't). Only standard names (`.env`, `.env.local`, `.env.production`, ...) and templates remain exempt
+- Unquoted dotenv-style assignments (`JWT_SECRET=c8f3...` without quotes) are now caught by a line-anchored credential pattern
+
 ## [1.5.0] - 2026-07-13
 
 ### Added

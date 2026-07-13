@@ -74,11 +74,20 @@ export function scanFiles(
   const HYGIENE_EXEMPT_RE =
     /(?:^|\/)(?:examples?|demos?|benchmarks?|scripts?|playground)\//;
 
+  /**
+   * Standard env file names that legitimately hold real values and are
+   * expected to be gitignored - the env check owns those. Anything else
+   * that merely starts with ".env" (.env.backup, .env.old, .env.prod)
+   * is a copy someone made and MUST be scanned: benchmark testing showed
+   * gitleaks catches committed .env backups while we used to skip them.
+   */
+  const STANDARD_ENV_RE =
+    /^\.env(?:\.(?:local|development|production|test|staging))?(?:\.local)?$/;
+
   for (const file of files) {
     const base = path.basename(file);
-    // Never flag .env files themselves for secrets/todos; they are expected
-    // to contain real values and are handled by the env check.
-    const isEnvFile = base.startsWith(".env");
+    const isStandardEnv = STANDARD_ENV_RE.test(base);
+    const isEnvTemplate = base === ".env.example" || base === ".env.sample" || base === ".env.template";
     const ext = path.extname(file).toLowerCase();
     const isCode = CODE_ONLY.has(ext);
 
@@ -92,7 +101,7 @@ export function scanFiles(
         todos.push(...scanContentForTodos(content, file));
       }
     }
-    if (!isEnvFile && base !== ".env.example" && base !== ".env.sample") {
+    if (!isStandardEnv && !isEnvTemplate) {
       secrets.push(...scanContentForSecrets(content, file, secretAllowlist));
     }
   }

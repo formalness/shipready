@@ -203,6 +203,22 @@ describe("scanContentForSecrets", () => {
     expect(found[0].confidence).toBe("high");
   });
 
+  it("catches unquoted dotenv-style credentials (committed .env backups)", () => {
+    const found = scanContentForSecrets(
+      "JWT_SECRET=c8f3a9d2e7b1f4a6c0d5e8b3f7a2c9d4e1b6f0a5c8d3e7b2f9a4c1d6e0b5f8a3",
+      ".env.backup"
+    );
+    expect(found[0].kind).toBe("Hardcoded credential");
+  });
+
+  it("does not flag unquoted env references to other variables", () => {
+    const found = scanContentForSecrets(
+      "API_KEY=${SHARED_API_KEY}",
+      ".env.backup"
+    );
+    expect(found).toEqual([]);
+  });
+
   it("catches real keys on lines that merely mention example.com", () => {
     const found = scanContentForSecrets(
       `fetch("https://api.example.com", { headers: { t: "ghp_Zq9rT3mN8vL2wX5cB7dF1gH4Zq9rT3mN" } })`,

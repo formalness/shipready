@@ -363,13 +363,26 @@ pnpm dev      # run the CLI from source (tsx)
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for project structure and how to add new checks or secret patterns.
 
+## How does it compare to gitleaks?
+
+Measured head-to-head on a corpus of 7 real-format leaks and 10 false-positive baits (gitleaks v8.24.3):
+
+| | shipready | gitleaks |
+| --- | --- | --- |
+| Real leaks caught | **7 / 7** | 4 / 7 |
+| Error-level false positives | **0** | 1 |
+| Newer key formats (`sk-proj-`, `sk-ant-`) | ✓ | missed |
+| Committed `.env.backup` | ✓ | partial |
+
+gitleaks remains more battle-tested for deep git-history forensics with hundreds of rules. shipready covers the leaks that actually happen in modern AI-assisted projects — plus README, env hygiene, and code hygiene that gitleaks doesn't check at all. Full methodology, fairness notes, and reproduction steps: [BENCHMARK.md](./BENCHMARK.md).
+
 ## Roadmap
 
 - [x] `shipready staged` for pre-commit hooks
 - [x] SARIF report output for GitHub code scanning
 - [x] Git history scanning (`--history`)
 - [x] Live key verification (`--verify`)
-- [ ] Benchmark against gitleaks/trufflehog with published numbers
+- [x] Benchmark against gitleaks with published numbers ([BENCHMARK.md](./BENCHMARK.md))
 - [ ] Framework-aware scoring (Next.js vs Vite vs Python have different needs)
 - [ ] Optional AI-powered fix suggestions (bring your own key)
 

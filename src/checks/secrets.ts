@@ -258,6 +258,17 @@ const PATTERNS: SecretPattern[] = [
     group: 1,
     minEntropy: 3.8,
   },
+  {
+    // Unquoted dotenv-style assignment (KEY=value at line start). Catches
+    // committed .env backups where values carry no quotes - a gap found by
+    // benchmarking against gitleaks. Anchored to line start so ordinary
+    // code assignments (always quoted) don't double-match.
+    kind: "Hardcoded credential",
+    re: /^[A-Z0-9_]*(?:API_?KEY|SECRET(?:_KEY)?|ACCESS_TOKEN|AUTH_TOKEN|PASSWORD|PASSWD|CREDENTIALS?)[A-Z0-9_]*=([A-Za-z0-9+/_.=-]{16,})\s*$/,
+    confidence: "medium",
+    group: 1,
+    minEntropy: 3.8,
+  },
 ];
 
 /** Words and shapes that indicate a placeholder, not a real secret. */
