@@ -7,6 +7,7 @@ import { detectProject, runScan, scanFiles } from "./scanner.js";
 import { loadConfig } from "./config.js";
 import { fixAgentFiles } from "./fixers/agentFiles.js";
 import { fixEnvExample, type FixResult } from "./fixers/envExample.js";
+import { fixSecrets, projectLoadsDotenv } from "./fixers/secrets.js";
 import { fixGitignore } from "./fixers/gitignore.js";
 import { renderReport } from "./utils/report.js";
 import { toSarif } from "./utils/sarif.js";
@@ -48,12 +49,37 @@ function resolveRoot(dir: string | undefined): string {
 async function applyFixes(root: string, force: boolean, dryRun = false): Promise<FixResult[]> {
   const config = loadConfig(root);
   const project = await detectProject(root, config);
-  const { envUsages } = scanFiles(root, project.sourceFiles, config.secretAllowlist);
-  return [
-    fixEnvExample(root, envUsages, force, dryRun),
+  const { envUsages, secrets } = scanFiles(root, project.sourceFiles, config.secretAllowlist);
+  const secretFix = fixSecrets(root, secrets, dryRun);
+
+  const handled = new Set(secretFix.results.map((r) => r.file));
+  const results = [
+    ...secretFix.results,
+    ...[fixEnvExample(root, envUsages, force, dryRun)].filter(
+      (r) => !(r.action === "skipped" && handled.has(r.file))
+    ),
     fixGitignore(root, dryRun),
     ...fixAgentFiles(root, project, force, dryRun),
   ];
+
+  for (const { finding, reason } of secretFix.manual) {
+    results.push({
+      file: finding.file,
+      action: "skipped",
+      reason: `secret at line ${finding.line} needs a manual fix: ${reason}`,
+    });
+  }
+
+  if (secretFix.envAdditions.length > 0 && !projectLoadsDotenv(root)) {
+    results.push({
+      file: ".env",
+      action: "skipped",
+      reason:
+        "heads up: nothing loads .env automatically - run with `node --env-file=.env` (Node 20+) or add dotenv",
+    });
+  }
+
+  return results;
 }
 
 /** Reads the CLI's own version from its package.json (works from dist/ at runtime). */
@@ -165,7 +191,7 @@ export function buildProgram(): Command {
 
   program
     .command("fix")
-    .description("Apply safe automatic fixes (.env.example, .gitignore, agent files)")
+    .description("Apply safe automatic fixes (move secrets to .env, .env.example, .gitignore, agent files)")
     .argument("[path]", "project directory (defaults to current directory)")
     .option("-f, --force", "overwrite existing files")
     .option("--dry-run", "show what would change without writing anything")

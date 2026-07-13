@@ -242,6 +242,29 @@ console.log("startup banner"); // shipready-ignore
 
 For project-wide exceptions, prefer `secretAllowlist` in the config (see below) so the suppression is reviewable in one place.
 
+## Secret autofix
+
+`shipready fix` moves hardcoded secrets out of your code into `.env`:
+
+```js
+// before
+const githubToken = "ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+// after
+const githubToken = process.env.GITHUB_TOKEN;
+```
+
+The value lands in `.env` (gitignored), a placeholder lands in `.env.example`, and env var names are derived from your identifiers (`stripeApiKey` becomes `STRIPE_API_KEY`). TypeScript gets `process.env.NAME!` to keep strict mode compiling; Python gets `os.environ["NAME"]` with the `import os` added.
+
+It never breaks your program - a rewrite only happens when it is provably safe:
+
+- only complete quoted string literals are replaced; a password embedded in a database URL is flagged for manual restructuring instead
+- client-side code (`"use client"`, `import.meta.env`) is never rewritten - an env var would still ship to the browser, so shipready tells you to move the call behind a server endpoint
+- after rewriting, the file is re-scanned; if the secret somehow survived, the file is restored untouched
+- identical values across files map to one env var; name collisions get numeric suffixes; existing `.env` entries are never overwritten
+- if nothing in your project loads `.env` (no dotenv/Next.js/Vite), shipready tells you to run with `node --env-file=.env`
+
+Use `--dry-run` to preview every change first. Remember to rotate any key that was already pushed - moving it to `.env` does not un-leak it.
+
 ## Scoring
 
 The score starts at 100 and every deduction is itemized right under the score bar - the number is never a black box:

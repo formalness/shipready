@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.8.0 - 2026-07-13
+
+### Added
+
+- Secret autofix: `shipready fix` now moves hardcoded secrets into `.env`, replacing each literal with `process.env.NAME` (JS), `process.env.NAME!` (TS), or `os.environ["NAME"]` (Python, with the import added). Placeholders land in `.env.example`; env names are derived from the assigned identifier. Rewrites only happen when provably safe: complete string literals only, never in client-side code, post-fix re-scan verification with rollback, existing `.env` entries never overwritten. Secrets that cannot be moved safely (values embedded in URLs, unsupported file types) are itemized as manual fixes with reasons. If nothing in the project loads `.env`, the fix output says how to load it.
+
 ## 1.7.0 - 2026-07-13
 
 ### Added
