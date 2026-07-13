@@ -36,24 +36,64 @@ export function findWorkspaceDirs(root: string, pkg: PackageJsonLike | null): st
   }
 
   const dirs = new Set<string>();
+  const addPackagesUnder = (base: string, depth: number) => {
+    const abs = path.join(root, base);
+    if (!fs.existsSync(abs)) return;
+    try {
+      for (const entry of fs.readdirSync(abs, { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.name === "node_modules") continue;
+        const rel = path.join(base, entry.name);
+        if (fs.existsSync(path.join(root, rel, "package.json"))) dirs.add(rel);
+        // "packages/**/*" style patterns nest one extra level (e.g. astro's
+        // packages/integrations/react). Depth-capped to avoid crawling.
+        else if (depth > 1) addPackagesUnder(rel, depth - 1);
+      }
+    } catch { /* unreadable dir */ }
+  };
+
   for (const pattern of patterns) {
     if (pattern.startsWith("!")) continue;
-    if (pattern.endsWith("/*")) {
-      const base = pattern.slice(0, -2);
-      const abs = path.join(root, base);
-      if (!fs.existsSync(abs)) continue;
-      try {
-        for (const entry of fs.readdirSync(abs, { withFileTypes: true })) {
-          if (entry.isDirectory() && fs.existsSync(path.join(abs, entry.name, "package.json"))) {
-            dirs.add(path.join(base, entry.name));
-          }
-        }
-      } catch { /* unreadable dir */ }
+    if (pattern.includes("**")) {
+      addPackagesUnder(pattern.slice(0, pattern.indexOf("**")).replace(/\/$/, ""), 3);
+    } else if (pattern.endsWith("/*")) {
+      addPackagesUnder(pattern.slice(0, -2), 1);
     } else if (fs.existsSync(path.join(root, pattern, "package.json"))) {
       dirs.add(pattern);
     }
   }
+
+  // Repos without workspace config often still split into conventional
+  // app dirs (frontend/ + backend/, client/ + server/). Treating those as
+  // pseudo-workspaces makes env/script checks see the whole project.
+  if (dirs.size === 0) {
+    for (const conventional of ["frontend", "backend", "client", "server", "web", "app", "api"]) {
+      if (fs.existsSync(path.join(root, conventional, "package.json"))) {
+        dirs.add(conventional);
+      }
+    }
+  }
   return [...dirs].sort();
+}
+
+/**
+ * Detects non-JS languages living alongside the primary framework, so a
+ * FastAPI + React template reads "Vite + Python" instead of hiding half
+ * the project.
+ */
+export function detectExtraLanguages(root: string, framework: Framework): string[] {
+  const markers: Array<[string, string]> = [
+    ["pyproject.toml", "Python"],
+    ["requirements.txt", "Python"],
+    ["go.mod", "Go"],
+    ["Cargo.toml", "Rust"],
+    ["Gemfile", "Ruby"],
+    ["composer.json", "PHP"],
+  ];
+  const found = new Set<string>();
+  for (const [file, lang] of markers) {
+    if (lang !== framework && fs.existsSync(path.join(root, file))) found.add(lang);
+  }
+  return [...found];
 }
 
 /** Detects the package manager based on lockfiles and manifests. */

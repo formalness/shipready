@@ -242,6 +242,30 @@ console.log("startup banner"); // shipready-ignore
 
 For project-wide exceptions, prefer `secretAllowlist` in the config (see below) so the suppression is reviewable in one place.
 
+## Scoring
+
+The score starts at 100 and every deduction is itemized right under the score bar - the number is never a black box:
+
+| Deduction | Points |
+| --- | --- |
+| No package.json | -20 |
+| No README | -15 |
+| Weak README | -8 |
+| No build script | -8 |
+| No test script | -6 |
+| `.env.example` missing | -10 |
+| `.env` not ignored by git | -15 |
+| Hardcoded secret | -25 each (capped at -50) |
+| Secret in git history | -10 each (capped at -30) |
+| TODO/FIXME comment | -2 each (capped at -15) |
+
+Checks adapt to what your repo actually is:
+
+- **Monorepos** - workspaces (`package.json` `workspaces`, `pnpm-workspace.yaml`, including `**` globs) and conventional `frontend/` + `backend/` splits are detected; scripts and `.env.example` files in workspace packages count.
+- **Libraries** - packages with a `files` allowlist aren't required to have `dev`/`build` scripts.
+- **Non-JS ecosystems** - Go/Rust/Python/etc. projects get ecosystem-appropriate `.gitignore` expectations, and `.env` is only expected if the code actually reads env vars.
+- **Mixed-language repos** - a FastAPI + React project reads "Vite + Python", not just "Vite".
+
 ## Configuration
 
 Optional `shipready.config.json` in your project root:

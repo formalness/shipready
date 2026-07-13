@@ -71,6 +71,8 @@ export interface ProjectInfo {
   sourceFiles: string[];
   /** Workspace package dirs (relative) when the repo is a monorepo. */
   workspaceDirs: string[];
+  /** Non-JS languages detected alongside the primary framework. */
+  extraLanguages: string[];
 }
 
 export interface PackageJsonLike {
@@ -87,6 +89,8 @@ export interface Report {
   project: ProjectInfo;
   results: CheckResult[];
   score: number;
+  /** Per-item score deductions so the number is never a black box. */
+  deductions: Array<{ reason: string; points: number }>;
 }
 
 /** A detected process.env variable usage. */

@@ -3,6 +3,19 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.7.0 - 2026-07-13
+
+### Added
+
+- Score breakdown: every deduction is itemized under the score bar and included in `--json` output (`deductions`), so the score is never a black box. Documented the full scoring model in the README.
+- Deep workspace globs (`packages/**/*`) and conventional `frontend/` + `backend/` splits are now detected as workspaces.
+- Mixed-language detection: a FastAPI + React repo reads "Vite + Python" instead of hiding the Python half.
+- Library awareness: packages with a `files` allowlist are not required to have `dev`/`build` scripts (express-style repos no longer get script noise).
+- Context-aware `.gitignore` expectations: `.next` is only suggested for Next.js, build output dirs only when a build script exists, and `.env` only when the code actually reads env vars.
+- Scripts living in workspace packages now satisfy the missing-scripts check for monorepo roots.
+
+Validated against a 7-repo corpus: full-stack-fastapi-template, ripgrep, express, astro, next-forge, gitleaks, taxonomy.
+
 ## 1.6.0 - 2026-07-13
 
 ### Added

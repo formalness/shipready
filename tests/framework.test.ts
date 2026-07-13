@@ -9,6 +9,7 @@ import {
   isNodeEcosystem,
   runCommand,
   findWorkspaceDirs,
+  detectExtraLanguages,
 } from "../src/utils/framework.js";
 import { checkPackageJson } from "../src/checks/packageJson.js";
 import type { ProjectInfo } from "../src/types.js";
@@ -254,3 +255,50 @@ describe("findWorkspaceDirs / monorepo framework detection", () => {
     expect(findWorkspaceDirs("/nonexistent", { name: "x" })).toEqual([]);
   });
 });
+
+describe("deep workspaces, pseudo-workspaces, and extra languages", () => {
+  it("expands ** workspace globs one nesting level deep", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "shipready-deep-"));
+    try {
+      fs.mkdirSync(path.join(root, "packages", "integrations", "react"), { recursive: true });
+      fs.writeFileSync(path.join(root, "packages", "integrations", "react", "package.json"), "{}");
+      const dirs = findWorkspaceDirs(root, { name: "x", workspaces: ["packages/**/*"] } as never);
+      expect(dirs).toContain(path.join("packages", "integrations", "react"));
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("treats conventional frontend/backend dirs as pseudo-workspaces", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "shipready-pseudo-"));
+    try {
+      fs.mkdirSync(path.join(root, "frontend"), { recursive: true });
+      fs.writeFileSync(path.join(root, "frontend", "package.json"), "{}");
+      expect(findWorkspaceDirs(root, { name: "x" } as never)).toEqual(["frontend"]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("detects Python alongside a JS framework", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "shipready-lang-"));
+    try {
+      fs.writeFileSync(path.join(root, "pyproject.toml"), "[project]\nname = \"api\"\n");
+      expect(detectExtraLanguages(root, "Vite")).toEqual(["Python"]);
+      // A Python project should not list Python as "extra".
+      expect(detectExtraLanguages(root, "Python")).toEqual([]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+

@@ -22,7 +22,7 @@ import {
   readJsonFile,
   readTextFile,
 } from "./utils/files.js";
-import { detectFramework, detectPackageManager, findWorkspaceDirs } from "./utils/framework.js";
+import { detectExtraLanguages, detectFramework, detectPackageManager, findWorkspaceDirs } from "./utils/framework.js";
 import { isRuleDisabled, loadConfig, type ShipreadyConfig } from "./config.js";
 
 /** File extensions considered code for content scanning (not config/data). */
@@ -51,6 +51,7 @@ export async function detectProject(
     scripts: pkg?.scripts ?? {},
     sourceFiles,
     workspaceDirs,
+    extraLanguages: detectExtraLanguages(root, detectFramework(pkg, root, sourceFiles, workspaceDirs)),
   };
 }
 
@@ -111,37 +112,68 @@ export function scanFiles(
   return { envUsages, secrets, todos };
 }
 
-/** Score deductions per the shipready scoring model. */
-export function calculateScore(results: CheckResult[]): number {
-  let score = 100;
+/** A single score deduction with its human-readable reason. */
+export interface ScoreDeduction {
+  reason: string;
+  points: number;
+}
+
+/**
+ * Score deductions per the shipready scoring model. Returns the breakdown
+ * so users can see exactly where every point went instead of trusting an
+ * opaque number.
+ */
+export function calculateScoreBreakdown(results: CheckResult[]): {
+  score: number;
+  deductions: ScoreDeduction[];
+} {
   const all = results.flatMap((r) => r.findings);
   const has = (rule: string) => all.some((f) => f.rule === rule);
   const count = (rule: string) => all.filter((f) => f.rule === rule).length;
+  const deductions: ScoreDeduction[] = [];
+  const deduct = (points: number, reason: string) => {
+    if (points > 0) deductions.push({ reason, points });
+  };
 
-  if (has("package-json.missing")) score -= 20;
-  if (has("readme.missing")) score -= 15;
-  if (has("readme.weak")) score -= 8;
+  if (has("package-json.missing")) deduct(20, "no package.json");
+  if (has("readme.missing")) deduct(15, "no README");
+  if (has("readme.weak")) deduct(8, "weak README");
 
   // Missing scripts: look at message to determine which ones
   const scriptsFinding = all.find((f) => f.rule === "scripts.missing");
   if (scriptsFinding) {
-    if (scriptsFinding.message.includes("build")) score -= 8;
-    if (scriptsFinding.message.includes("test")) score -= 6;
+    if (scriptsFinding.message.includes("build")) deduct(8, "no build script");
+    if (scriptsFinding.message.includes("test")) deduct(6, "no test script");
   }
 
-  if (has("env.example-missing")) score -= 10;
-  if (has("env.not-ignored")) score -= 15;
+  if (has("env.example-missing")) deduct(10, ".env.example missing");
+  if (has("env.not-ignored")) deduct(15, ".env not ignored");
 
   const secretCount = count("secrets.detected-item");
-  score -= Math.min(secretCount * 25, 50);
+  deduct(
+    Math.min(secretCount * 25, 50),
+    secretCount === 1 ? "hardcoded secret" : `hardcoded secrets (${secretCount})`
+  );
 
   const historyCount = count("history.secret-item");
-  score -= Math.min(historyCount * 10, 30);
+  deduct(
+    Math.min(historyCount * 10, 30),
+    historyCount === 1 ? "secret in git history" : `secrets in git history (${historyCount})`
+  );
 
   const todoCount = count("todos.item");
-  score -= Math.min(todoCount * 2, 15);
+  deduct(
+    Math.min(todoCount * 2, 15),
+    todoCount === 1 ? "TODO comment" : `TODO comments (${todoCount})`
+  );
 
-  return Math.max(0, score);
+  const total = deductions.reduce((sum, d) => sum + d.points, 0);
+  return { score: Math.max(0, 100 - total), deductions };
+}
+
+/** Score per the shipready scoring model (see calculateScoreBreakdown). */
+export function calculateScore(results: CheckResult[]): number {
+  return calculateScoreBreakdown(results).score;
 }
 
 /** Removes findings whose rules are disabled by config. */
@@ -196,7 +228,10 @@ export async function runScan(root: string, options: ScanOptions = {}): Promise<
     checkSecrets(secrets),
     ...(options.history ? [checkHistory(historySecrets, historyScanned)] : []),
     checkTodos(todos),
-    checkGitignore(root, project.framework),
+    checkGitignore(root, project.framework, {
+      hasBuildScript: Boolean(project.scripts["build"]),
+      usesEnv: envUsages.length > 0,
+    }),
   ];
 
   // Disabled rules are removed before scoring so they don't affect the score.
@@ -205,6 +240,6 @@ export async function runScan(root: string, options: ScanOptions = {}): Promise<
   return {
     project,
     results,
-    score: calculateScore(results),
+    ...calculateScoreBreakdown(results),
   };
 }

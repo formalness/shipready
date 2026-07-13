@@ -29,14 +29,45 @@ const ECOSYSTEM_IGNORES: Partial<Record<Framework, string[]>> = {
   unknown: [".env"],
 };
 
+/** Extra context that tailors gitignore expectations to the repo. */
+export interface GitignoreContext {
+  /** Whether a build script exists (build output dirs only matter then). */
+  hasBuildScript?: boolean;
+  /** Whether env vars are used anywhere in the code. */
+  usesEnv?: boolean;
+}
+
 /** Returns the entries a project of the given framework should ignore. */
-export function importantIgnoresFor(framework?: Framework): string[] {
-  if (!framework || isNodeEcosystem(framework)) return IMPORTANT_IGNORES;
-  return ECOSYSTEM_IGNORES[framework] ?? [".env"];
+export function importantIgnoresFor(
+  framework?: Framework,
+  ctx?: GitignoreContext
+): string[] {
+  // Without context, keep the legacy full list (also the config-less API).
+  if (!framework && !ctx) return IMPORTANT_IGNORES;
+
+  if (!framework || isNodeEcosystem(framework)) {
+    const entries = [".env", ".env.local", "node_modules"];
+    // Build output dirs are only worth ignoring when something builds.
+    if (ctx?.hasBuildScript !== false) {
+      if (framework === "Next.js") entries.push(".next");
+      else entries.push("dist");
+    }
+    return entries;
+  }
+
+  const base = ECOSYSTEM_IGNORES[framework] ?? [".env"];
+  // A repo that reads no env vars gains nothing from ignoring .env -
+  // suggesting it to e.g. ripgrep is pure noise.
+  if (ctx?.usesEnv === false) return base.filter((e) => e !== ".env");
+  return base;
 }
 
 /** Returns which important entries are missing from gitignore content. */
-export function missingIgnoreEntries(content: string, framework?: Framework): string[] {
+export function missingIgnoreEntries(
+  content: string,
+  framework?: Framework,
+  ctx?: GitignoreContext
+): string[] {
   const lines = content
     .split("\n")
     .map((l) => l.trim())
@@ -52,11 +83,11 @@ export function missingIgnoreEntries(content: string, framework?: Framework): st
       return false;
     });
 
-  return importantIgnoresFor(framework).filter((e) => !covers(e));
+  return importantIgnoresFor(framework, ctx).filter((e) => !covers(e));
 }
 
 /** Checks .gitignore existence and important entries. */
-export function checkGitignore(root: string, framework?: Framework): CheckResult {
+export function checkGitignore(root: string, framework?: Framework, ctx?: GitignoreContext): CheckResult {
   const findings: Finding[] = [];
   const content = readTextFile(root, ".gitignore");
 
@@ -69,7 +100,7 @@ export function checkGitignore(root: string, framework?: Framework): CheckResult
     return { name: "gitignore", findings };
   }
 
-  const missing = missingIgnoreEntries(content, framework);
+  const missing = missingIgnoreEntries(content, framework, ctx);
   if (missing.length > 0) {
     findings.push({
       severity: "warning",
