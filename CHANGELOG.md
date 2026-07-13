@@ -3,6 +3,14 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.2] - 2026-07-13
+
+### Fixed
+
+- URL credentials equal to common dev defaults (`password`, `root`, `postgres`, `admin`, ...) are no longer flagged - scaffolding templates and docker-compose files are not leaks. Found by field-testing on t3-oss/create-t3-app, which scored 19/100 because of its own template strings
+- Database URLs pointing at localhost (or docker service hosts like `db`, `postgres`) with a real-looking password are downgraded to medium confidence (warning) instead of error
+- Real passwords on remote hosts keep high confidence
+
 ## [1.3.1] - 2026-07-13
 
 ### Fixed

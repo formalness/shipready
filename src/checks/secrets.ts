@@ -14,6 +14,11 @@ interface SecretPattern {
   confidence: Confidence;
   /** Capture group index holding the secret value (defaults to whole match). */
   group?: number;
+  /**
+   * Capture group holding the host of a credential URL. Localhost hosts
+   * downgrade the finding to medium; common dev passwords are skipped.
+   */
+  hostGroup?: number;
   /** Minimum Shannon entropy required for the matched value. */
   minEntropy?: number;
   /** Skip placeholder/randomness value checks (e.g. PEM headers are structural). */
@@ -217,16 +222,19 @@ const PATTERNS: SecretPattern[] = [
   {
     // Placeholder checks run against the password only (group 1), so
     // documentation hosts like db.example.com don't suppress real leaks.
+    // The host (group 2) downgrades localhost URLs to medium confidence.
     kind: "Database URL with password",
-    re: /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|rediss|amqp):\/\/[^:\s"'@/]+:([^@\s"']+)@/,
+    re: /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|rediss|amqp):\/\/[^:\s"'@/]+:([^@\s"']+)@([^\s"'/:?]+)/,
     confidence: "high",
     group: 1,
+    hostGroup: 2,
   },
   {
     kind: "Basic auth in URL",
-    re: /https?:\/\/[^:\s"'/@]{3,}:([^@\s"']{8,})@/,
+    re: /https?:\/\/[^:\s"'/@]{3,}:([^@\s"']{8,})@([^\s"'/:?]+)/,
     confidence: "medium",
     group: 1,
+    hostGroup: 2,
     minEntropy: 3.0,
   },
   {
@@ -267,6 +275,17 @@ const PLACEHOLDER_LINE_RE =
 /** Paths whose findings are downgraded to medium confidence. */
 const TEST_PATH_RE =
   /(^|[/\\])(tests?|__tests__|__mocks__|spec|specs|fixtures?|mocks?|examples?|samples?|docs?)([/\\]|$)|\.(test|spec)\.[a-z]+$/i;
+
+/**
+ * Default/dev passwords that appear in scaffolding templates and docker
+ * compose files. A URL credential equal to one of these is not a leak.
+ */
+const COMMON_DEV_PASSWORD_RE =
+  /^(?:password|passwd|pass|root|admin|postgres|mysql|mongo|redis|rabbitmq|secret|test|dev|guest|user|toor|changeit|letmein|qwerty)$/i;
+
+/** Hosts that indicate a local dev database, not a production leak. */
+const LOCAL_HOST_RE =
+  /^(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[?::1\]?|host\.docker\.internal|db|database|postgres|mysql|mongo|redis)$/i;
 
 /** True when a matched value looks like a placeholder or templated string. */
 function isPlaceholderValue(value: string): boolean {
@@ -329,7 +348,15 @@ export function scanContentForSecrets(
         continue;
       }
 
-      const confidence: Confidence = isTestPath ? "medium" : pattern.confidence;
+      let effective: Confidence = pattern.confidence;
+      if (pattern.hostGroup !== undefined) {
+        // Scaffolding defaults like root:password@localhost are not leaks.
+        if (COMMON_DEV_PASSWORD_RE.test(value)) continue;
+        const host = match[pattern.hostGroup] ?? "";
+        if (LOCAL_HOST_RE.test(host)) effective = "medium";
+      }
+
+      const confidence: Confidence = isTestPath ? "medium" : effective;
 
       found.push({
         kind: pattern.kind,

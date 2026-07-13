@@ -170,6 +170,39 @@ describe("scanContentForSecrets", () => {
     expect(found).toEqual([]);
   });
 
+  it("skips scaffolding defaults like root:password@localhost", () => {
+    const found = scanContentForSecrets(
+      `DATABASE_URL="mysql://root:password@localhost:3306/myapp"`,
+      "cli/installers/envVars.ts"
+    );
+    expect(found).toEqual([]);
+  });
+
+  it("skips root:root style docker-compose credentials", () => {
+    const found = scanContentForSecrets(
+      `DATABASE_URL: mysql://root:root@localhost:3306/test`,
+      ".github/workflows/e2e.yml"
+    );
+    expect(found).toEqual([]);
+  });
+
+  it("downgrades real-looking passwords on localhost to medium", () => {
+    const found = scanContentForSecrets(
+      `const DB = "postgres://app:Xk9mQ2vR8tN4wY6b@localhost:5432/dev";`,
+      "src/db.ts"
+    );
+    expect(found[0].kind).toBe("Database URL with password");
+    expect(found[0].confidence).toBe("medium");
+  });
+
+  it("keeps high confidence for real passwords on remote hosts", () => {
+    const found = scanContentForSecrets(
+      `const DB = "postgres://app:Xk9mQ2vR8tN4wY6b@db.company.io:5432/prod";`,
+      "src/db.ts"
+    );
+    expect(found[0].confidence).toBe("high");
+  });
+
   it("catches real keys on lines that merely mention example.com", () => {
     const found = scanContentForSecrets(
       `fetch("https://api.example.com", { headers: { t: "ghp_Zq9rT3mN8vL2wX5cB7dF1gH4Zq9rT3mN" } })`,
