@@ -11,7 +11,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -39,3 +39,13 @@ jobs:
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Keeps the floating v1 tag on the latest v1.x.y release so
+      # `uses: formalness/shipready@v1` always resolves to the newest release.
+      - name: Update floating v1 tag
+        if: startsWith(github.event.release.tag_name, 'v1.')
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f v1 "${{ github.event.release.tag_name }}"
+          git push origin v1 --force

@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.0] - 2026-07-13
+
+### Added
+
+- Official GitHub Action: add `uses: formalness/shipready@v1` to any workflow to run the quality gate with a single step. Supports `path`, `verbose`, `version`, and `args` inputs.
+
 ## [1.0.3] - 2026-07-13
 
 ### Fixed

@@ -1,0 +1,37 @@
+name: "shipready"
+description: "Pre-flight check for your repo before shipping: secrets, env safety, README, debug leftovers, and repo hygiene."
+author: "formalness"
+
+branding:
+  icon: "check-circle"
+  color: "green"
+
+inputs:
+  path:
+    description: "Project directory to scan, relative to the workspace root."
+    required: false
+    default: "."
+  verbose:
+    description: "Show file and line locations for every finding (true/false)."
+    required: false
+    default: "true"
+  version:
+    description: "shipready version to run (an npm dist-tag or exact version, e.g. latest or 1.0.3)."
+    required: false
+    default: "latest"
+  args:
+    description: "Extra arguments passed to `shipready check` (e.g. --json)."
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run shipready check
+      shell: bash
+      run: |
+        FLAGS=""
+        if [ "${{ inputs.verbose }}" = "true" ]; then
+          FLAGS="--verbose"
+        fi
+        npx -y shipready@${{ inputs.version }} check "${{ inputs.path }}" $FLAGS ${{ inputs.args }}

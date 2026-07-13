@@ -159,7 +159,9 @@ Optional `shipready.config.json` in your project root:
 
 ## Using in CI
 
-`shipready check` exits with code `1` when errors are found:
+### GitHub Action (recommended)
+
+Add the quality gate to any workflow with a single step:
 
 ```yaml
 # .github/workflows/quality.yml
@@ -170,9 +172,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: formalness/shipready@v1
+```
+
+The job fails when errors (secrets, unignored `.env`, ...) are found.
+
+| Input | Default | Purpose |
+| --- | --- | --- |
+| `path` | `.` | Project directory to scan |
+| `verbose` | `true` | Show file/line locations for every finding |
+| `version` | `latest` | shipready version to run (npm tag or exact version) |
+| `args` | `""` | Extra arguments for `shipready check` (e.g. `--json`) |
+
+Example with options:
+
+```yaml
+      - uses: formalness/shipready@v1
         with:
-          node-version: 20
+          path: apps/web
+          verbose: "false"
+          version: "1.0.3"
+```
+
+### Manual setup
+
+`shipready check` exits with code `1` when errors are found, so it works in any CI:
+
+```yaml
       - run: npx shipready check --verbose
 ```
 
