@@ -64,6 +64,14 @@ export function scanFiles(
   const secrets: SecretFinding[] = [];
   const todos: TodoFinding[] = [];
 
+  /**
+   * Directories where console.log and friends are intentional (demo code,
+   * benchmarks, scripts). Secrets are still scanned there - a leaked key in
+   * an example is just as dangerous - but hygiene noise is skipped.
+   */
+  const HYGIENE_EXEMPT_RE =
+    /(?:^|\/)(?:examples?|demos?|benchmarks?|scripts?|playground)\//;
+
   for (const file of files) {
     const base = path.basename(file);
     // Never flag .env files themselves for secrets/todos; they are expected
@@ -78,7 +86,9 @@ export function scanFiles(
 
     if (isCode) {
       envUsages.push(...extractEnvUsages(content, file));
-      todos.push(...scanContentForTodos(content, file));
+      if (!HYGIENE_EXEMPT_RE.test(file)) {
+        todos.push(...scanContentForTodos(content, file));
+      }
     }
     if (!isEnvFile && base !== ".env.example" && base !== ".env.sample") {
       secrets.push(...scanContentForSecrets(content, file, secretAllowlist));

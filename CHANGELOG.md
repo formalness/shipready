@@ -3,6 +3,12 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.1] - 2026-07-13
+
+### Fixed
+
+- Code hygiene checks (console.log, TODO/FIXME) no longer flag files in `examples/`, `demos/`, `benchmarks/`, `scripts/`, and `playground/` directories, where logging is intentional. Found by field-testing on expressjs/express, where 36 of 38 flagged console.log calls were in example code. Secrets are still scanned in those directories - a leaked key in an example is just as dangerous.
+
 ## [1.3.0] - 2026-07-13
 
 ### Added
