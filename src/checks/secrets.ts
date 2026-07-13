@@ -23,6 +23,14 @@ interface SecretPattern {
   minEntropy?: number;
   /** Skip placeholder/randomness value checks (e.g. PEM headers are structural). */
   skipValueChecks?: boolean;
+  /**
+   * True for shape-based patterns (generic assignments, opaque hex, URLs)
+   * that often match fabricated values in test fixtures. Only these are
+   * downgraded to medium confidence under test paths - provider-prefixed
+   * keys (AKIA..., ghp_..., sk-ant-...) look real wherever they appear,
+   * and AI tools paste real keys into test files all the time.
+   */
+  generic?: boolean;
 }
 
 /**
@@ -102,11 +110,13 @@ const PATTERNS: SecretPattern[] = [
   },
   {
     kind: "Twilio credential",
+    generic: true,
     re: /\b(?:AC|SK)[a-f0-9]{32}\b/,
     confidence: "high",
   },
   {
     kind: "Telegram bot token",
+    generic: true,
     re: /\b\d{8,10}:[A-Za-z0-9_-]{35}\b/,
     confidence: "high",
   },
@@ -133,11 +143,13 @@ const PATTERNS: SecretPattern[] = [
   },
   {
     kind: "Mailchimp key",
+    generic: true,
     re: /\b[a-f0-9]{32}-us\d{1,2}\b/,
     confidence: "high",
   },
   {
     kind: "Mailgun key",
+    generic: true,
     re: /\bkey-[a-f0-9]{32}\b/,
     confidence: "high",
   },
@@ -215,6 +227,7 @@ const PATTERNS: SecretPattern[] = [
   },
   {
     kind: "Discord bot token",
+    generic: true,
     re: /\b[MNO][A-Za-z\d_-]{23,25}\.[A-Za-z\d_-]{6}\.[A-Za-z\d_-]{27,}\b/,
     confidence: "medium",
     minEntropy: 4.0,
@@ -224,6 +237,7 @@ const PATTERNS: SecretPattern[] = [
     // documentation hosts like db.example.com don't suppress real leaks.
     // The host (group 2) downgrades localhost URLs to medium confidence.
     kind: "Database URL with password",
+    generic: true,
     re: /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|rediss|amqp):\/\/[^:\s"'@/]+:([^@\s"']+)@([^\s"'/:?]+)/,
     confidence: "high",
     group: 1,
@@ -231,6 +245,7 @@ const PATTERNS: SecretPattern[] = [
   },
   {
     kind: "Basic auth in URL",
+    generic: true,
     re: /https?:\/\/[^:\s"'/@]{3,}:([^@\s"']{8,})@([^\s"'/:?]+)/,
     confidence: "medium",
     group: 1,
@@ -239,12 +254,14 @@ const PATTERNS: SecretPattern[] = [
   },
   {
     kind: "JWT",
+    generic: true,
     re: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/,
     confidence: "medium",
     minEntropy: 4.0,
   },
   {
     kind: "Authorization header",
+    generic: true,
     re: /\b(?:authorization|x-api-key)["']?\s*[:=]\s*["']?(?:Bearer|Basic|token)\s+([A-Za-z0-9+/_.=-]{20,})\b/i,
     confidence: "medium",
     group: 1,
@@ -253,6 +270,7 @@ const PATTERNS: SecretPattern[] = [
   {
     // Credential-style assignment with a long opaque quoted value
     kind: "Hardcoded credential",
+    generic: true,
     re: /\b[A-Z0-9_]*(?:API_?KEY|SECRET(?:_KEY)?|ACCESS_TOKEN|AUTH_TOKEN|PASSWORD|PASSWD|CREDENTIALS?)[A-Z0-9_]*\s*[=:]\s*["']([A-Za-z0-9+/_.=-]{16,})["']/i,
     confidence: "medium",
     group: 1,
@@ -264,6 +282,7 @@ const PATTERNS: SecretPattern[] = [
     // benchmarking against gitleaks. Anchored to line start so ordinary
     // code assignments (always quoted) don't double-match.
     kind: "Hardcoded credential",
+    generic: true,
     re: /^[A-Z0-9_]*(?:API_?KEY|SECRET(?:_KEY)?|ACCESS_TOKEN|AUTH_TOKEN|PASSWORD|PASSWD|CREDENTIALS?)[A-Z0-9_]*=([A-Za-z0-9+/_.=-]{16,})\s*$/,
     confidence: "medium",
     group: 1,
@@ -321,6 +340,21 @@ export function maskSecret(secret: string): string {
   return `${prefix}...${suffix}`;
 }
 
+/**
+ * Global-flag copies of each pattern for matchAll. Compiled once - the
+ * originals stay non-global so .test()/.match() callers keep working.
+ */
+const GLOBAL_PATTERN_RES: RegExp[] = PATTERNS.map(
+  (p) => new RegExp(p.re.source, p.re.flags.includes("g") ? p.re.flags : `${p.re.flags}g`)
+);
+
+/** Credential-keyword assignment with no value on the same line. */
+const DANGLING_ASSIGNMENT_RE =
+  /\b[A-Z0-9_]*(?:API_?KEY|SECRET(?:_KEY)?|ACCESS_TOKEN|AUTH_TOKEN|PASSWORD|PASSWD|CREDENTIALS?)[A-Z0-9_]*\s*[=:]\s*$/i;
+
+/** Quoted opaque value at the start of a continuation line. */
+const CONTINUATION_VALUE_RE = /^\s*["']([A-Za-z0-9+/_.=-]{16,})["']/;
+
 /** Scans a single file's content for potential secrets. */
 export function scanContentForSecrets(
   content: string,
@@ -338,47 +372,93 @@ export function scanContentForSecrets(
     // Documentation/example lines are not real leaks.
     if (PLACEHOLDER_LINE_RE.test(line)) continue;
 
-    for (const pattern of PATTERNS) {
-      const match = line.match(pattern.re);
-      if (!match) continue;
+    // Character spans already claimed by a more specific pattern. Patterns
+    // are ordered most specific first, so the first pattern to claim a span
+    // wins - but distinct secrets elsewhere on the same line (e.g. two keys
+    // in one config object) are still reported.
+    const claimed: Array<[number, number]> = [];
+    const overlapsClaimed = (start: number, end: number) =>
+      claimed.some(([s, e]) => start < e && end > s);
 
-      const value = match[pattern.group ?? 0];
+    for (let pi = 0; pi < PATTERNS.length; pi++) {
+      const pattern = PATTERNS[pi];
+      for (const match of line.matchAll(GLOBAL_PATTERN_RES[pi])) {
+        const start = match.index ?? 0;
+        const end = start + match[0].length;
+        if (overlapsClaimed(start, end)) continue;
 
-      if (!pattern.skipValueChecks) {
-        if (isPlaceholderValue(value)) continue;
-        if (
-          pattern.minEntropy !== undefined &&
-          shannonEntropy(value) < pattern.minEntropy
-        ) {
+        const value = match[pattern.group ?? 0];
+
+        if (!pattern.skipValueChecks) {
+          if (isPlaceholderValue(value)) continue;
+          if (
+            pattern.minEntropy !== undefined &&
+            shannonEntropy(value) < pattern.minEntropy
+          ) {
+            continue;
+          }
+        }
+
+        // User-configured false positives (substring match on the value or line)
+        if (allowlist.some((a) => match[0].includes(a) || line.includes(a))) {
           continue;
         }
+
+        let effective: Confidence = pattern.confidence;
+        if (pattern.hostGroup !== undefined) {
+          // Scaffolding defaults like root:password@localhost are not leaks.
+          if (COMMON_DEV_PASSWORD_RE.test(value)) continue;
+          const host = match[pattern.hostGroup] ?? "";
+          if (LOCAL_HOST_RE.test(host)) effective = "medium";
+        }
+
+        // Test paths only downgrade shape-based patterns. A provider-prefixed
+        // key that survived the entropy/placeholder gates looks real, and a
+        // real key in a test fixture is just as leaked as one in src/.
+        const confidence: Confidence =
+          isTestPath && pattern.generic ? "medium" : effective;
+
+        claimed.push([start, end]);
+        found.push({
+          kind: pattern.kind,
+          file,
+          line: i + 1,
+          masked: maskSecret(value),
+          confidence,
+          // Raw value stays in memory only; used by --verify, never printed.
+          raw: value,
+        });
       }
+    }
 
-      // User-configured false positives (substring match on the value or line)
-      if (allowlist.some((a) => match[0].includes(a) || line.includes(a))) {
-        continue;
+    // Multiline credential assignment: keyword on one line, quoted value on
+    // the next (formatters wrap long lines this way). Only runs when the
+    // value line alone matches no pattern - provider-prefixed values are
+    // caught by the normal per-line scan on the next iteration.
+    if (i + 1 < lines.length && DANGLING_ASSIGNMENT_RE.test(line)) {
+      const next = lines[i + 1];
+      const valueMatch = next.match(CONTINUATION_VALUE_RE);
+      if (
+        valueMatch &&
+        !PLACEHOLDER_LINE_RE.test(next) &&
+        !PATTERNS.some((p) => p.re.test(valueMatch[1]))
+      ) {
+        const value = valueMatch[1];
+        if (
+          !isPlaceholderValue(value) &&
+          shannonEntropy(value) >= 3.8 &&
+          !allowlist.some((a) => value.includes(a) || next.includes(a))
+        ) {
+          found.push({
+            kind: "Hardcoded credential",
+            file,
+            line: i + 2,
+            masked: maskSecret(value),
+            confidence: "medium",
+            raw: value,
+          });
+        }
       }
-
-      let effective: Confidence = pattern.confidence;
-      if (pattern.hostGroup !== undefined) {
-        // Scaffolding defaults like root:password@localhost are not leaks.
-        if (COMMON_DEV_PASSWORD_RE.test(value)) continue;
-        const host = match[pattern.hostGroup] ?? "";
-        if (LOCAL_HOST_RE.test(host)) effective = "medium";
-      }
-
-      const confidence: Confidence = isTestPath ? "medium" : effective;
-
-      found.push({
-        kind: pattern.kind,
-        file,
-        line: i + 1,
-        masked: maskSecret(value),
-        confidence,
-        // Raw value stays in memory only; used by --verify, never printed.
-        raw: value,
-      });
-      break; // one finding per line is enough
     }
   }
   return found;

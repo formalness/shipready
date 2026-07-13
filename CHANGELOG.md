@@ -3,6 +3,15 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 1.5.2 - 2026-07-13
+
+### Fixed
+
+- Multiple distinct secrets on the same line are now all reported (previously only the first match per line was found).
+- Credential assignments whose value wraps to the next line (formatter line-wrapping) are now detected.
+- Provider-prefixed keys (`AKIA...`, `ghp_...`, `sk-ant-...`) found in test/fixture paths are no longer downgraded to medium confidence - only generic shape-based patterns are. A real key in a test fixture is just as leaked as one in `src/`.
+- Removed the hardcoded test-count badge from the README (it drifted out of date); the CI badge conveys test status.
+
 ## [1.5.1] - 2026-07-13
 
 ### Added

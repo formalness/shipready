@@ -4,7 +4,6 @@
 
 [![CI](https://github.com/formalness/shipready/actions/workflows/ci.yml/badge.svg)](https://github.com/formalness/shipready/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/shipready.svg)](https://www.npmjs.com/package/shipready)
-[![tests](https://img.shields.io/badge/tests-179%20passing-brightgreen.svg)](https://github.com/formalness/shipready/tree/main/tests)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![node >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
 
@@ -215,7 +214,8 @@ The scanner combines provider-specific patterns with **Shannon entropy analysis*
 | Stripe (test) | `sk_test_`, `pk_test_` |
 | JWT | `eyJ...` with valid structure |
 | Generic credential | `API_KEY=`, `SECRET=`, `PASSWORD=` assignments — only when the value has high entropy |
-| Any finding in test/fixture/mock files | automatically downgraded |
+| Generic-pattern findings (opaque assignments, URLs, JWTs) in test/fixture/mock files | automatically downgraded |
+| Provider-prefixed keys (`AKIA...`, `ghp_...`, `sk-ant-...`) in test files | kept at full severity |
 
 False-positive protection:
 
