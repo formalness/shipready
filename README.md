@@ -53,8 +53,26 @@ Scans the project and prints a report with a 0-100 score.
 | `-v, --verbose` | show file and line locations for every finding |
 | `--json` | output the raw structured report as JSON (great for CI) |
 | `--fix` | apply safe fixes, re-scan, and show the score before/after |
+| `--history` | also scan the **full git history** (all branches) for secrets that were committed and later removed |
+| `--verify` | check detected keys against provider APIs to see if they are **live right now** |
 
 Exits with code `1` when errors are found, so you can use it in CI pipelines.
+
+#### `--history`: secrets buried in old commits
+
+Deleting a leaked key from your code does not delete it from git history — anyone who clones the repo can still read it. `shipready check --history` scans every added line in every commit on every branch, dedupes findings, and skips anything still present in the working tree (the regular scan already covers those). Each finding shows the abbreviated commit hash so you know where to look.
+
+If something is found: rotate the key, then purge it with [git filter-repo](https://github.com/newren/git-filter-repo) or [BFG](https://rtyley.github.io/bfg-repo-cleaner/).
+
+#### `--verify`: is the key actually live?
+
+For 12+ providers (OpenAI, Anthropic, GitHub, GitLab, Stripe, SendGrid, Google, npm, Hugging Face, Figma, and more) shipready can make a single read-only "who am I" request to the provider's API:
+
+- `[VERIFIED ACTIVE]` — the key works right now; this upgrades the finding to an error and jumps to the top of next steps
+- `[not active - rotate anyway]` — the provider rejected it (revoked or fake)
+- no marker — the provider has no safe verification endpoint, or the network was unavailable
+
+Verification requests contain only the key itself, go directly to the provider's official API host, and never mutate remote state. Nothing is ever sent to any third party.
 
 ### `shipready init [path]`
 
@@ -79,26 +97,28 @@ It never deletes user code and never overwrites files without `--force`. A summa
 ## Example output
 
 ```txt
-shipready report
+╭──────────────────────────────────────────────────────────╮
+│ shipready v1.3.0                                         │
+│ project Next.js  ·  pm pnpm                              │
+╰──────────────────────────────────────────────────────────╯
 
-Project: Next.js
-Package manager: pnpm
+  Score  ████████████████████░░░░░░░░  72/100  almost there
 
-Summary:
-✓ package.json found
-✓ README.md found
-✗ .env.example missing
-✗ .env is not ignored
-⚠ 4 TODO/FIXME comments found
-⚠ 2 console.log calls found
-✓ No obvious secrets found
+  ✓ package.json  ok
+  ✓ README        ok
+  ✗ Env safety    .env.example missing (3 env vars used in code)
+  ✗                .env is not ignored by git
+  ✓ Secrets       No obvious secrets found
+  ✗ Git history   1 secret buried in git history (removed from code but still exposed)
+  ⚠ Code hygiene  4 TODO/FIXME comments found
+  ⚠                2 console.log calls found
+  ✓ .gitignore    ok
 
-Score: 72/100
-
-Recommended next steps:
-1. Add .env to .gitignore
-2. Create .env.example (run: shipready fix)
-3. Remove debug logs before shipping
+  Next steps
+    1. Purge leaked secrets from git history (BFG or git filter-repo) and rotate them
+    2. Add .env to .gitignore
+    3. Create .env.example (run: shipready fix)
+    4. Remove debug logs and debugger statements before shipping
 ```
 
 ## What it checks

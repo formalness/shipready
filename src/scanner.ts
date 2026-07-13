@@ -12,6 +12,8 @@ import { checkGitignore } from "./checks/gitignore.js";
 import { checkPackageJson } from "./checks/packageJson.js";
 import { checkReadme } from "./checks/readme.js";
 import { checkSecrets, scanContentForSecrets } from "./checks/secrets.js";
+import { checkHistory, isGitRepo, scanGitHistory } from "./checks/history.js";
+import { verifySecrets } from "./checks/verify.js";
 import { checkTodos, scanContentForTodos, type TodoFinding } from "./checks/todos.js";
 import {
   fileExists,
@@ -110,6 +112,9 @@ export function calculateScore(results: CheckResult[]): number {
   const secretCount = count("secrets.detected-item");
   score -= Math.min(secretCount * 25, 50);
 
+  const historyCount = count("history.secret-item");
+  score -= Math.min(historyCount * 10, 30);
+
   const todoCount = count("todos.item");
   score -= Math.min(todoCount * 2, 15);
 
@@ -130,8 +135,16 @@ function applyDisabledRules(
   }));
 }
 
+/** Options for runScan. */
+export interface ScanOptions {
+  /** Also scan the full git history for secrets. */
+  history?: boolean;
+  /** Verify detected keys against provider APIs (network calls). */
+  verify?: boolean;
+}
+
 /** Runs the full scan and returns a structured report. */
-export async function runScan(root: string): Promise<Report> {
+export async function runScan(root: string, options: ScanOptions = {}): Promise<Report> {
   const config = loadConfig(root);
   const project = await detectProject(root, config);
   const { envUsages, secrets, todos } = scanFiles(
@@ -140,11 +153,25 @@ export async function runScan(root: string): Promise<Report> {
     config.secretAllowlist
   );
 
+  let historySecrets: SecretFinding[] = [];
+  let historyScanned = false;
+  if (options.history) {
+    historyScanned = isGitRepo(root);
+    if (historyScanned) {
+      historySecrets = scanGitHistory(root, config.secretAllowlist, secrets);
+    }
+  }
+
+  if (options.verify) {
+    await verifySecrets([...secrets, ...historySecrets]);
+  }
+
   const rawResults: CheckResult[] = [
     checkPackageJson(project),
     checkReadme(root),
     checkEnv(root, envUsages),
     checkSecrets(secrets),
+    ...(options.history ? [checkHistory(historySecrets, historyScanned)] : []),
     checkTodos(todos),
     checkGitignore(root),
   ];

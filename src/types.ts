@@ -76,4 +76,15 @@ export interface SecretFinding {
   masked: string;
   /** high -> error, medium -> warning. Defaults to high when absent. */
   confidence?: "high" | "medium";
+  /**
+   * Raw matched value. Kept in memory only for --verify; never printed,
+   * never serialized into the report.
+   */
+  raw?: string;
+  /** Result of live verification against the provider API. */
+  verified?: "active" | "inactive" | "unknown";
+  /** Where the secret was found. Defaults to the working tree. */
+  source?: "working-tree" | "history";
+  /** Commit hash (abbreviated) for history findings. */
+  commit?: string;
 }

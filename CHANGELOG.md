@@ -3,6 +3,18 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.0] - 2026-07-13
+
+### Added
+
+- **`--history`**: scans the full git history (all branches) for secrets that were committed and later removed; findings are deduped, attributed to their commit hash, and excluded when the same secret is already reported from the working tree
+- **`--verify`**: live verification of detected keys against 12+ provider APIs (OpenAI, Anthropic, GitHub, GitLab, Stripe, SendGrid, Google, npm, Hugging Face, Figma, and more); active keys are marked `[VERIFIED ACTIVE]` and upgraded to errors, rejected keys are marked `[not active - rotate anyway]`. Read-only "who am I" requests only, sent directly to the provider — never to a third party
+- History findings reduce the score (up to -30) and add a "purge git history" next step
+
+### Changed
+
+- **Complete report redesign**: boxed header with version and project info, colored score progress bar with a ship-readiness verdict, aligned per-check columns with human-friendly labels, indented details and next-steps sections
+
 ## [1.2.0] - 2026-07-13
 
 ### Added

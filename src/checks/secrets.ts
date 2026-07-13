@@ -337,6 +337,8 @@ export function scanContentForSecrets(
         line: i + 1,
         masked: maskSecret(value),
         confidence,
+        // Raw value stays in memory only; used by --verify, never printed.
+        raw: value,
       });
       break; // one finding per line is enough
     }
@@ -359,6 +361,22 @@ export function checkSecrets(secretFindings: SecretFinding[]): CheckResult {
     return { name: "secrets", findings };
   }
 
+  const verifiedActive = secretFindings.filter((s) => s.verified === "active");
+  if (verifiedActive.length > 0) {
+    findings.push({
+      severity: "error",
+      rule: "secrets.verified-active",
+      message: `${verifiedActive.length} key${verifiedActive.length > 1 ? "s" : ""} VERIFIED ACTIVE - rotate immediately`,
+    });
+  }
+
+  /** Suffix describing the live verification result, when available. */
+  const verifyNote = (s: SecretFinding): string => {
+    if (s.verified === "active") return " [VERIFIED ACTIVE]";
+    if (s.verified === "inactive") return " [not active - rotate anyway]";
+    return "";
+  };
+
   if (high.length > 0) {
     findings.push({
       severity: "error",
@@ -369,7 +387,7 @@ export function checkSecrets(secretFindings: SecretFinding[]): CheckResult {
       findings.push({
         severity: "error",
         rule: "secrets.detected-item",
-        message: `${s.kind}: ${s.masked}`,
+        message: `${s.kind}: ${s.masked}${verifyNote(s)}`,
         file: s.file,
         line: s.line,
       });
@@ -384,9 +402,10 @@ export function checkSecrets(secretFindings: SecretFinding[]): CheckResult {
     });
     for (const s of medium) {
       findings.push({
-        severity: "warning",
-        rule: "secrets.possible-item",
-        message: `${s.kind}: ${s.masked}`,
+        // A verified-active key is an error no matter the pattern confidence.
+        severity: s.verified === "active" ? "error" : "warning",
+        rule: s.verified === "active" ? "secrets.detected-item" : "secrets.possible-item",
+        message: `${s.kind}: ${s.masked}${verifyNote(s)}`,
         file: s.file,
         line: s.line,
       });

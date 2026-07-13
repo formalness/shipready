@@ -77,15 +77,21 @@ export function buildProgram(): Command {
     .option("-v, --verbose", "show file locations for every finding")
     .option("--json", "output the raw report as JSON")
     .option("--fix", "apply safe fixes, then re-scan and show the improved report")
-    .action(async (dir: string | undefined, opts: { verbose?: boolean; json?: boolean; fix?: boolean }) => {
+    .option("--history", "also scan the full git history for leaked secrets")
+    .option("--verify", "check detected keys against provider APIs to see if they are live")
+    .action(async (dir: string | undefined, opts: { verbose?: boolean; json?: boolean; fix?: boolean; history?: boolean; verify?: boolean }) => {
       try {
         const root = resolveRoot(dir);
-        let report = await runScan(root);
+        const scanOpts = { history: opts.history, verify: opts.verify };
+        if (opts.verify && !opts.json) {
+          console.log(pc.dim("\n  Verifying detected keys against provider APIs..."));
+        }
+        let report = await runScan(root, scanOpts);
 
         if (opts.fix) {
           const before = report.score;
           const results = await applyFixes(root, false);
-          report = await runScan(root);
+          report = await runScan(root, scanOpts);
 
           if (!opts.json) {
             console.log("");
@@ -104,7 +110,7 @@ export function buildProgram(): Command {
         if (opts.json) {
           console.log(JSON.stringify(report, null, 2));
         } else {
-          console.log(renderReport(report, opts.verbose ?? false));
+          console.log(renderReport(report, opts.verbose ?? false, ownVersion()));
         }
         // Non-zero exit when errors are present, useful for CI.
         const hasErrors = report.results.some((r) =>
