@@ -3,6 +3,14 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.1] - 2026-07-13
+
+### Changed
+
+- Default ignore patterns now match at any depth (e.g. `mobile/build/`, nested `node_modules`), not just the project root
+- Minified and bundled vendor assets (`*.min.js`, `*.min.css`, `*.bundle.js`, `*.chunk.js`, `vendor/`) are skipped by default - they are not user code and flooded reports with TODO/console.log noise
+- Python artifacts (`__pycache__/`, `.venv/`, `venv/`), source maps, and lockfiles are also skipped by default
+
 ## [1.0.0] - 2026-07-13
 
 First public release.
