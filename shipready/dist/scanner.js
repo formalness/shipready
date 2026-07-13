@@ -1,0 +1,116 @@
+import path from "node:path";
+import { checkEnv, extractEnvUsages } from "./checks/env.js";
+import { checkGitignore } from "./checks/gitignore.js";
+import { checkPackageJson } from "./checks/packageJson.js";
+import { checkReadme } from "./checks/readme.js";
+import { checkSecrets, scanContentForSecrets } from "./checks/secrets.js";
+import { checkTodos, scanContentForTodos } from "./checks/todos.js";
+import { fileExists, findSourceFiles, isProbablyBinary, readJsonFile, readTextFile, } from "./utils/files.js";
+import { detectFramework, detectPackageManager } from "./utils/framework.js";
+import { isRuleDisabled, loadConfig } from "./config.js";
+/** File extensions considered code for content scanning (not config/data). */
+const CODE_ONLY = new Set([
+    ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts",
+    ".vue", ".svelte", ".py", ".rb", ".go", ".rs", ".java", ".php",
+]);
+/** Gathers structured project info from the given root. */
+export async function detectProject(root, config) {
+    const pkg = readJsonFile(root, "package.json");
+    const sourceFiles = await findSourceFiles(root, config?.ignore ?? []);
+    return {
+        root,
+        hasPackageJson: fileExists(root, "package.json"),
+        packageJson: pkg,
+        packageManager: detectPackageManager(root),
+        framework: detectFramework(pkg),
+        scripts: pkg?.scripts ?? {},
+        sourceFiles,
+    };
+}
+/** Extracts env usages, secrets, and todos from all source files. */
+export function scanFiles(root, files, secretAllowlist = []) {
+    const envUsages = [];
+    const secrets = [];
+    const todos = [];
+    for (const file of files) {
+        const base = path.basename(file);
+        // Never flag .env files themselves for secrets/todos; they are expected
+        // to contain real values and are handled by the env check.
+        const isEnvFile = base.startsWith(".env");
+        const ext = path.extname(file).toLowerCase();
+        const isCode = CODE_ONLY.has(ext);
+        if (isProbablyBinary(root, file))
+            continue;
+        const content = readTextFile(root, file);
+        if (content === null)
+            continue;
+        if (isCode) {
+            envUsages.push(...extractEnvUsages(content, file));
+            todos.push(...scanContentForTodos(content, file));
+        }
+        if (!isEnvFile && base !== ".env.example" && base !== ".env.sample") {
+            secrets.push(...scanContentForSecrets(content, file, secretAllowlist));
+        }
+    }
+    return { envUsages, secrets, todos };
+}
+/** Score deductions per the shipready scoring model. */
+export function calculateScore(results) {
+    let score = 100;
+    const all = results.flatMap((r) => r.findings);
+    const has = (rule) => all.some((f) => f.rule === rule);
+    const count = (rule) => all.filter((f) => f.rule === rule).length;
+    if (has("package-json.missing"))
+        score -= 20;
+    if (has("readme.missing"))
+        score -= 15;
+    if (has("readme.weak"))
+        score -= 8;
+    // Missing scripts: look at message to determine which ones
+    const scriptsFinding = all.find((f) => f.rule === "scripts.missing");
+    if (scriptsFinding) {
+        if (scriptsFinding.message.includes("build"))
+            score -= 8;
+        if (scriptsFinding.message.includes("test"))
+            score -= 6;
+    }
+    if (has("env.example-missing"))
+        score -= 10;
+    if (has("env.not-ignored"))
+        score -= 15;
+    const secretCount = count("secrets.detected-item");
+    score -= Math.min(secretCount * 25, 50);
+    const todoCount = count("todos.item");
+    score -= Math.min(todoCount * 2, 15);
+    return Math.max(0, score);
+}
+/** Removes findings whose rules are disabled by config. */
+function applyDisabledRules(results, disableRules) {
+    if (disableRules.length === 0)
+        return results;
+    return results.map((r) => ({
+        ...r,
+        findings: r.findings.filter((f) => !isRuleDisabled(f.rule, disableRules) && !isRuleDisabled(r.name, disableRules)),
+    }));
+}
+/** Runs the full scan and returns a structured report. */
+export async function runScan(root) {
+    const config = loadConfig(root);
+    const project = await detectProject(root, config);
+    const { envUsages, secrets, todos } = scanFiles(root, project.sourceFiles, config.secretAllowlist);
+    const rawResults = [
+        checkPackageJson(project),
+        checkReadme(root),
+        checkEnv(root, envUsages),
+        checkSecrets(secrets),
+        checkTodos(todos),
+        checkGitignore(root),
+    ];
+    // Disabled rules are removed before scoring so they don't affect the score.
+    const results = applyDisabledRules(rawResults, config.disableRules);
+    return {
+        project,
+        results,
+        score: calculateScore(results),
+    };
+}

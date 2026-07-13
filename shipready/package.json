@@ -1,0 +1,67 @@
+{
+  "name": "shipready",
+  "version": "1.0.1",
+  "description": "Pre-flight check for your repo before shipping. Scans AI-coded projects for secrets, env issues, debug leftovers, and generates AI-agent instruction files.",
+  "type": "module",
+  "license": "MIT",
+  "author": "shipready contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/formalness/shipready.git"
+  },
+  "bugs": {
+    "url": "https://github.com/formalness/shipready/issues"
+  },
+  "homepage": "https://github.com/formalness/shipready#readme",
+  "bin": {
+    "shipready": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "prepublishOnly": "npm run build && npm run test"
+  },
+  "keywords": [
+    "cli",
+    "security",
+    "secrets",
+    "secret-scanning",
+    "ai",
+    "vibe-coding",
+    "pre-flight",
+    "ship",
+    "lint",
+    "env",
+    "gitignore",
+    "agents-md"
+  ],
+  "dependencies": {
+    "commander": "^12.1.0",
+    "fast-glob": "^3.3.2",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

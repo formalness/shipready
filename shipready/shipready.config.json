@@ -1,0 +1,4 @@
+{
+  "ignore": ["tests/**", "dist/**", ".github/**"],
+  "disableRules": ["todos.debug", "todos.markers", "todos.item"]
+}
