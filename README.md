@@ -275,6 +275,32 @@ It never breaks your program - a rewrite only happens when it is provably safe:
 
 Use `--dry-run` to preview every change first. Remember to rotate any key that was already pushed - moving it to `.env` does not un-leak it.
 
+## How it compares
+
+shipready, [gitleaks](https://github.com/gitleaks/gitleaks), and [trufflehog](https://github.com/trufflesecurity/trufflehog) solve different problems: gitleaks and trufflehog are dedicated secret scanners (more detector rules, git-history scanning, trufflehog can verify keys against live APIs). shipready is a pre-ship check - secrets are one of eight checks, and it is the only one of the three that also **fixes** what it finds.
+
+That said, here is all three running in working-tree mode over the same 8 real repos (6 popular open-source projects + 2 repos found on GitHub containing a real leaked OpenAI key). Versions: shipready 1.8.1, gitleaks 8.24.3, trufflehog 3.88.35, July 2026, same machine:
+
+| repo | shipready | gitleaks | trufflehog |
+| --- | --- | --- | --- |
+| full-stack-fastapi-template | 0.3s / 0 | 0.6s / 0 | 7.6s / 2 |
+| ripgrep | 0.8s / 0 | 0.6s / 0 | 2.5s / 0 |
+| express | 0.4s / 0 | 0.5s / 0 | 2.3s / 0 |
+| astro | 3.3s / 2 | 1.8s / 14 | 14.4s / 62 |
+| next-forge | 0.6s / 0 | 0.8s / 0 | 2.9s / 2 |
+| taxonomy | 0.3s / 0 | 0.5s / 0 | 2.6s / 0 |
+| repo with a real leaked key | 0.2s / **1** | 0.5s / 9 | 2.8s / **1** |
+| repo with `sk-...` placeholders | 0.1s / 0 | 0.4s / 0 | 2.4s / 0 |
+| **total** | **6.0s** | **5.5s** | **37.4s** |
+
+Cells are `time / secret findings`. This corpus contains exactly **one real secret** (the leaked OpenAI key). What each tool reported beyond it:
+
+- **shipready**: found the real key (and `fix` correctly refused to auto-move it - it sits in client-side HTML). The 2 astro findings are lower-confidence warnings in a test file.
+- **gitleaks**: found the real key, plus 22 false positives - astro test fixtures and certs (14), and Dreamweaver metadata files misread as API keys (8).
+- **trufflehog**: found the real key, plus 66 unverified findings - astro test tokens (62), lockfile hashes, and example connection strings from docs. Zero were verified against live APIs.
+
+Take the numbers as a scope illustration, not a rigorous study: the corpus is small, and the other tools scan more file types and more secret formats by design (that is where their extra findings come from). Reproduce it yourself with [`scripts/benchmark.py`](scripts/benchmark.py).
+
 ## Scoring
 
 The score starts at 100 and every deduction is itemized right under the score bar - the number is never a black box:
