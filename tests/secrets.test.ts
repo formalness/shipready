@@ -358,12 +358,23 @@ describe("scanContentForSecrets", () => {
     expect(found[0].confidence).toBe("medium");
   });
 
-  it("downgrades findings in test files to medium confidence", () => {
+  it("downgrades generic-pattern findings in test files to medium confidence", () => {
+    const found = scanContentForSecrets(
+      `API_KEY = "Zq9rT3mN8vL2wX5cB7dF1gH4Jk6pQ0sU"`,
+      "tests/fixtures.test.ts"
+    );
+    expect(found[0].kind).toBe("Hardcoded credential");
+    expect(found[0].confidence).toBe("medium");
+  });
+
+  it("keeps provider-prefixed keys high confidence even in test files", () => {
+    // AI tools paste real keys into test fixtures constantly; a real-looking
+    // ghp_ token in tests/ is just as leaked as one in src/.
     const found = scanContentForSecrets(
       `token: "ghp_Zq9rT3mN8vL2wX5cB7dF1gH4Zq9rT3mN9xW2"`,
       "tests/fixtures.test.ts"
     );
-    expect(found[0].confidence).toBe("medium");
+    expect(found[0].confidence).toBe("high");
   });
 
   it("keeps high confidence outside test paths", () => {
@@ -372,6 +383,58 @@ describe("scanContentForSecrets", () => {
       "src/deploy.ts"
     );
     expect(found[0].confidence).toBe("high");
+  });
+
+  it("reports multiple distinct secrets on the same line", () => {
+    // Fixtures are assembled at runtime so GitHub push protection does not
+    // flag this test file itself as containing secrets.
+    const slackFixture = ["xoxb", "2847561930", "Zq9rT3mN8vL2wX5c"].join("-");
+    const found = scanContentForSecrets(
+      `cfg = { gh: "ghp_Zq9rT3mN8vL2wX5cB7dF1gH4Zq9rT3mN9xW2", slack: "${slackFixture}" }`,
+      "config.ts"
+    );
+    const kinds = found.map((f) => f.kind).sort();
+    expect(kinds).toEqual(["GitHub token", "Slack token"]);
+  });
+
+  it("does not double-report one secret matched by overlapping patterns", () => {
+    // The AWS key ID sits inside a credential-style line; only the most
+    // specific pattern should claim it.
+    const awsFixture = "AKIA" + "IOSFODNN7EXAMPLB";
+    const found = scanContentForSecrets(
+      `ACCESS_TOKEN = "${awsFixture}"`,
+      "config.ts"
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0].kind).toBe("AWS access key ID");
+  });
+
+  it("catches a credential assignment whose value wraps to the next line", () => {
+    const wrappedValue = "Zq9rT3mN8vL2wX5c" + "B7dF1gH4Jk6pQ0sUeR8tY3vA";
+    const found = scanContentForSecrets(
+      `const STRIPE_SECRET_KEY =\n  "${wrappedValue}";`,
+      "billing.ts"
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0].kind).toBe("Hardcoded credential");
+    expect(found[0].line).toBe(2);
+  });
+
+  it("does not double-report wrapped values that match a provider pattern", () => {
+    const found = scanContentForSecrets(
+      `const GITHUB_ACCESS_TOKEN =\n  "ghp_Zq9rT3mN8vL2wX5cB7dF1gH4Zq9rT3mN9xW2";`,
+      "deploy.ts"
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0].kind).toBe("GitHub token");
+  });
+
+  it("skips placeholder values on continuation lines", () => {
+    const found = scanContentForSecrets(
+      `const API_KEY =\n  "your-api-key-goes-here-1234";`,
+      "config.ts"
+    );
+    expect(found).toEqual([]);
   });
 
   it("skips bundled single-line blobs", () => {
